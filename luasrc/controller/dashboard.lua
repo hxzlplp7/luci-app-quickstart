@@ -110,7 +110,7 @@ function dashboard_api()
         local module_name = "luci.dashboard." .. route[1]
         local func_name = route[2]
 
-        local ok, mod = pcall(require, module_name)
+        local ok, mod = pcuire, module_name)
         if ok and mod and type(mod[func_name]) == "function" then
             local success, err = pcall(mod[func_name])
             if not success then

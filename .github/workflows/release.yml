@@ -18,11 +18,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare local feed layout
+        run: |
+          rm -rf .feed
+          mkdir -p .feed/luci-app-dashboard
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.feed' \
+            ./ ./.feed/luci-app-dashboard/
+
       - name: Build Package
         uses: openwrt/gh-action-sdk@main
         env:
           ARCH: x86_64-23.05.5
-          FEED_DIR: ${{ github.workspace }}
+          FEED_DIR: ${{ github.workspace }}/.feed
           PACKAGES: luci-app-dashboard
           NO_REFRESH_CHECK: true
 

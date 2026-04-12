@@ -1,8 +1,15 @@
 <%+header%>
 <%
   local jsonc = require "luci.jsonc"
+  local fs = require "nixio.fs"
   local features = { "_lua_force_array_" }
   local configs = {}
+  local features_json
+  local configs_json
+  local js_version = ""
+  local css_version = ""
+  local js_stat = fs.stat("/www/luci-static/dashboard/index.js")
+  local css_stat = fs.stat("/www/luci-static/dashboard/style.css")
   if luci.sys.call("[ -e /etc/init.d/dockerd ] >/dev/null 2>&1") == 0 then
       features[#features+1] = "dockerd"
   end
@@ -16,14 +23,32 @@
         ssl = ssl == "1"
       }
   end
+  features_json = jsonc.stringify(features)
+  configs_json = jsonc.stringify(configs)
+  if js_stat and js_stat.mtime then
+      js_version = "?v=" .. tostring(js_stat.mtime)
+  end
+  if css_stat and css_stat.mtime then
+      css_version = "?v=" .. tostring(css_stat.mtime)
+  end
 -%>
+<div
+    id="app"
+    data-token="<%=token%>"
+    data-prefix="<%=prefix%>"
+    data-features="<%=features_json%>"
+    data-configs="<%=configs_json%>">
+</div>
 <script>
     (function(){
-      window.token = "<%=token%>";
-      var vue_prefix="<%=prefix%>";
+      var app = document.getElementById('app');
+      window.token = app ? (app.getAttribute('data-token') || '') : '';
+      var vue_prefix = app ? (app.getAttribute('data-prefix') || '') : '';
+      var features = app ? (app.getAttribute('data-features') || '[]') : '[]';
+      var configs = app ? (app.getAttribute('data-configs') || '{}') : '{}';
       window.vue_base = vue_prefix + '/';
-      window.dashboard_features = <%=jsonc.stringify(features)%>;
-      window.dashboard_configs = <%=jsonc.stringify(configs)%>;
+      window.dashboard_features = JSON.parse(features);
+      window.dashboard_configs = JSON.parse(configs);
       if (location.pathname != vue_prefix && !location.pathname.startsWith(window.vue_base)) {
         if (window.history && window.history.replaceState) {
           window.history.replaceState({}, null, vue_prefix);
@@ -33,8 +58,6 @@
       }
     })();
 </script>
-<div id="app">
-</div>
-<script type="module" crossorigin src="/luci-static/dashboard/index.js<%# ?v=PKG_VERSION %>"></script>
-<link rel="stylesheet" href="/luci-static/dashboard/style.css<%# ?v=PKG_VERSION %>">
+<script type="module" crossorigin src="/luci-static/dashboard/index.js<%=js_version%>"></script>
+<link rel="stylesheet" href="/luci-static/dashboard/style.css<%=css_version%>">
 <%+footer%>
