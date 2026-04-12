@@ -6,10 +6,11 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-dashboard
-PKG_VERSION:=1.0.3-20260412
+PKG_VERSION:=1.0.4-20260412
 PKG_MAINTAINER:=dashboard-community
 
-LUCI_TITLE:=LuCI support for Dashboard
+LUCI_TITLE:=Dashboard 仪表盘
+LUCI_DESCRIPTION:=精简版仪表盘，提供系统、网络和存储状态概览
 LUCI_DEPENDS:=+luci-app-nlbwmon
 LUCI_PKGARCH:=all
 

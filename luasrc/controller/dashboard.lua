@@ -44,27 +44,13 @@ local routes = {
 
     ["GET:/system/status/"]            = {"api_system", "status"},
     ["GET:/u/system/version/"]         = {"api_system", "version"},
-    ["GET:/system/check-update/"]      = {"api_system", "check_update"},
     ["POST:/system/reboot/"]           = {"api_system", "reboot"},
 
-    -- P1: Guide / Wizard APIs
-    ["GET:/guide/pppoe/"]              = {"api_guide", "pppoe_get"},
-    ["POST:/guide/pppoe/"]             = {"api_guide", "pppoe_post"},
-    ["GET:/guide/dns-config/"]         = {"api_guide", "dns_config_get"},
-    ["POST:/guide/dns-config/"]        = {"api_guide", "dns_config_post"},
-    ["POST:/guide/dhcp-client/"]       = {"api_guide", "dhcp_client_post"},
-    ["GET:/guide/client-mode/"]        = {"api_guide", "client_mode_get"},
-    ["POST:/guide/client-mode/"]       = {"api_guide", "client_mode_post"},
-    ["POST:/guide/gateway-router/"]    = {"api_guide", "gateway_router_post"},
-    ["GET:/guide/lan/"]                = {"api_guide", "lan_get"},
-    ["POST:/guide/lan/"]               = {"api_guide", "lan_post"},
-    ["GET:/guide/soft-source/"]        = {"api_guide", "soft_source_get"},
-    ["POST:/guide/soft-source/"]       = {"api_guide", "soft_source_post"},
-    ["GET:/guide/soft-source/list/"]   = {"api_guide", "soft_source_list"},
-    ["GET:/u/guide/ddns/"]             = {"api_guide", "ddns_get"},
-    ["POST:/u/guide/ddns/"]            = {"api_guide", "ddns_post"},
-
-    -- Docker management (preserved per user request)
+    -- Preserved guide APIs used by the remaining dashboard features
+    ["GET:/guide/dns-config/"]             = {"api_guide", "dns_config_get"},
+    ["POST:/guide/dns-config/"]            = {"api_guide", "dns_config_post"},
+    ["GET:/u/guide/ddns/"]                 = {"api_guide", "ddns_get"},
+    ["POST:/u/guide/ddns/"]                = {"api_guide", "ddns_post"},
     ["GET:/guide/docker/status/"]          = {"api_guide", "docker_status"},
     ["GET:/guide/docker/partition/list/"]  = {"api_guide", "docker_partition_list"},
     ["POST:/guide/docker/transfer/"]       = {"api_guide", "docker_transfer"},

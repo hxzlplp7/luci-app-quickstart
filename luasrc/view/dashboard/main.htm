@@ -1,11 +1,58 @@
 <%+header%>
 <%
   local jsonc = require "luci.jsonc"
+  local i18n = require "luci.i18n"
   local fs = require "nixio.fs"
   local features = { "_lua_force_array_" }
   local configs = {}
+  local i18n_map = {
+    ["Network Config"] = i18n.translate("Network Config"),
+    ["Network Interface"] = i18n.translate("Network Interface"),
+    ["Traffic Monitoring"] = i18n.translate("Traffic Monitoring"),
+    ["Network Interfaces"] = i18n.translate("Network Interfaces"),
+    ["Bandwidth Monitoring"] = i18n.translate("Bandwidth Monitoring"),
+    ["Network Port Configuration"] = i18n.translate("Network Port Configuration"),
+    ["Protocol (Network Acquisition Method)"] = i18n.translate("Protocol (Network Acquisition Method)"),
+    ["DHCP Client"] = i18n.translate("DHCP Client"),
+    ["PPPoE"] = i18n.translate("PPPoE"),
+    ["Static Address"] = i18n.translate("Static Address"),
+    ["Dismiss"] = i18n.translate("Dismiss"),
+    ["Save"] = i18n.translate("Save"),
+    ["Delete"] = i18n.translate("Delete"),
+    ["Edit"] = i18n.translate("Edit"),
+    ["Save & Apply"] = i18n.translate("Save & Apply"),
+    ["Intranet"] = i18n.translate("Intranet"),
+    ["Disk"] = i18n.translate("Disk"),
+    ["File Manager"] = i18n.translate("File Manager"),
+    ["Only count mounted partitions"] = i18n.translate("Only count mounted partitions"),
+    ["Not partitioned"] = i18n.translate("Not partitioned"),
+    ["Unformatted"] = i18n.translate("Unformatted"),
+    ["No mounted"] = i18n.translate("No mounted"),
+    ["System partition"] = i18n.translate("System partition"),
+    ["Manual mount"] = i18n.translate("Manual mount"),
+    ["Partition and format"] = i18n.translate("Partition and format"),
+    ["Format Partition"] = i18n.translate("Format Partition"),
+    ["Manual Mount"] = i18n.translate("Manual Mount"),
+    ["Partition Information"] = i18n.translate("Partition Information"),
+    ["Exit"] = i18n.translate("Exit"),
+    ["Up"] = i18n.translate("Up"),
+    ["Down"] = i18n.translate("Down"),
+    ["Read only"] = i18n.translate("Read only"),
+    ["Read and write"] = i18n.translate("Read and write"),
+    ["Firmware"] = i18n.translate("Firmware"),
+    ["View network interface information"] = i18n.translate("View network interface information"),
+    ["Hard Disk Configuration"] = i18n.translate("Hard Disk Configuration"),
+    ["Mount Disk Configuration"] = i18n.translate("Mount Disk Configuration"),
+    ["Full disk format"] = i18n.translate("Full disk format"),
+    ["Partition information"] = i18n.translate("Partition information"),
+    ["S.M.A.R.T Exception"] = i18n.translate("S.M.A.R.T Exception"),
+    ["Current status:"] = i18n.translate("Current status:"),
+    ["Address"] = i18n.translate("Address"),
+    ["Directory"] = i18n.translate("Directory")
+  }
   local features_json
   local configs_json
+  local i18n_json
   local js_version = ""
   local css_version = ""
   local js_stat = fs.stat("/www/luci-static/dashboard/index.js")
@@ -25,6 +72,7 @@
   end
   features_json = jsonc.stringify(features)
   configs_json = jsonc.stringify(configs)
+  i18n_json = jsonc.stringify(i18n_map)
   if js_stat and js_stat.mtime then
       js_version = "?v=" .. tostring(js_stat.mtime)
   end
@@ -37,7 +85,8 @@
     data-token="<%=token%>"
     data-prefix="<%=prefix%>"
     data-features="<%=features_json%>"
-    data-configs="<%=configs_json%>">
+    data-configs="<%=configs_json%>"
+    data-i18n="<%=i18n_json%>">
 </div>
 <script>
     (function(){
@@ -46,15 +95,117 @@
       var vue_prefix = app ? (app.getAttribute('data-prefix') || '') : '';
       var features = app ? (app.getAttribute('data-features') || '[]') : '[]';
       var configs = app ? (app.getAttribute('data-configs') || '{}') : '{}';
+      var i18nMap = app ? (app.getAttribute('data-i18n') || '{}') : '{}';
       window.vue_base = vue_prefix + '/';
       window.dashboard_features = JSON.parse(features);
       window.dashboard_configs = JSON.parse(configs);
+      window.dashboard_i18n = JSON.parse(i18nMap);
+      if (location.pathname === vue_prefix + '/network' || location.pathname.indexOf(vue_prefix + '/network/') === 0) {
+        location.replace(vue_prefix + '/interfaceconfig');
+        return;
+      }
       if (location.pathname != vue_prefix && !location.pathname.startsWith(window.vue_base)) {
         if (window.history && window.history.replaceState) {
           window.history.replaceState({}, null, vue_prefix);
         } else {
           location.href = vue_prefix;
         }
+      }
+
+      var prefixRules = [
+        ['Disk status: ', '磁盘状态：'],
+        ['Disk format: ', '磁盘格式：'],
+        ['Partition Information - ', '分区信息 - '],
+        ['IP Address（', 'IP 地址（']
+      ];
+
+      function translateValue(value) {
+        if (!value) {
+          return value;
+        }
+
+        var normalized = value.replace(/\s+/g, ' ').trim();
+        if (!normalized) {
+          return value;
+        }
+
+        if (window.dashboard_i18n[normalized]) {
+          return value.replace(normalized, window.dashboard_i18n[normalized]);
+        }
+
+        for (var i = 0; i < prefixRules.length; i++) {
+          if (normalized.indexOf(prefixRules[i][0]) === 0) {
+            return value.replace(prefixRules[i][0], prefixRules[i][1]);
+          }
+        }
+
+        return value;
+      }
+
+      function walkAndTranslate(root) {
+        if (!root || !document.body) {
+          return;
+        }
+
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        var current;
+        while ((current = walker.nextNode())) {
+          var parentTag = current.parentNode && current.parentNode.tagName;
+          if (parentTag === 'SCRIPT' || parentTag === 'STYLE' || parentTag === 'NOSCRIPT') {
+            continue;
+          }
+          if (current.nodeValue && current.nodeValue.trim()) {
+            current.nodeValue = translateValue(current.nodeValue);
+          }
+        }
+
+        var elements = root.querySelectorAll ? root.querySelectorAll('[title],[placeholder],input[type="button"],button') : [];
+        for (var i = 0; i < elements.length; i++) {
+          var element = elements[i];
+          if (element.title) {
+            element.title = translateValue(element.title);
+          }
+          if (element.placeholder) {
+            element.placeholder = translateValue(element.placeholder);
+          }
+          if (element.tagName === 'INPUT' && element.type === 'button' && element.value) {
+            element.value = translateValue(element.value);
+          }
+        }
+      }
+
+      function installTranslator() {
+        walkAndTranslate(document.body);
+        var observer = new MutationObserver(function(mutations) {
+          for (var i = 0; i < mutations.length; i++) {
+            var mutation = mutations[i];
+            if (mutation.type === 'characterData' && mutation.target) {
+              mutation.target.nodeValue = translateValue(mutation.target.nodeValue);
+            }
+            for (var j = 0; j < mutation.addedNodes.length; j++) {
+              var node = mutation.addedNodes[j];
+              if (node.nodeType === 3 && node.nodeValue) {
+                var parentTag = node.parentNode && node.parentNode.tagName;
+                if (parentTag !== 'SCRIPT' && parentTag !== 'STYLE' && parentTag !== 'NOSCRIPT') {
+                  node.nodeValue = translateValue(node.nodeValue);
+                }
+              } else if (node.nodeType === 1) {
+                walkAndTranslate(node);
+              }
+            }
+          }
+        });
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          characterData: true
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', installTranslator, { once: true });
+      } else {
+        installTranslator();
       }
     })();
 </script>

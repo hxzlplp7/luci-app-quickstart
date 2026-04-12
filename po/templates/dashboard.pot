@@ -5,3 +5,132 @@ msgstr ""
 
 msgid "Dashboard"
 msgstr ""
+
+msgid "Network Config"
+msgstr ""
+
+msgid "Network Interface"
+msgstr ""
+
+msgid "Traffic Monitoring"
+msgstr ""
+
+msgid "Network Interfaces"
+msgstr ""
+
+msgid "Bandwidth Monitoring"
+msgstr ""
+
+msgid "Network Port Configuration"
+msgstr ""
+
+msgid "Protocol (Network Acquisition Method)"
+msgstr ""
+
+msgid "DHCP Client"
+msgstr ""
+
+msgid "PPPoE"
+msgstr ""
+
+msgid "Static Address"
+msgstr ""
+
+msgid "Dismiss"
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "Edit"
+msgstr ""
+
+msgid "Save & Apply"
+msgstr ""
+
+msgid "Intranet"
+msgstr ""
+
+msgid "Disk"
+msgstr ""
+
+msgid "File Manager"
+msgstr ""
+
+msgid "Only count mounted partitions"
+msgstr ""
+
+msgid "Not partitioned"
+msgstr ""
+
+msgid "Unformatted"
+msgstr ""
+
+msgid "No mounted"
+msgstr ""
+
+msgid "System partition"
+msgstr ""
+
+msgid "Manual mount"
+msgstr ""
+
+msgid "Partition and format"
+msgstr ""
+
+msgid "Format Partition"
+msgstr ""
+
+msgid "Manual Mount"
+msgstr ""
+
+msgid "Partition Information"
+msgstr ""
+
+msgid "Exit"
+msgstr ""
+
+msgid "Up"
+msgstr ""
+
+msgid "Down"
+msgstr ""
+
+msgid "Read only"
+msgstr ""
+
+msgid "Read and write"
+msgstr ""
+
+msgid "Firmware"
+msgstr ""
+
+msgid "View network interface information"
+msgstr ""
+
+msgid "Hard Disk Configuration"
+msgstr ""
+
+msgid "Mount Disk Configuration"
+msgstr ""
+
+msgid "Full disk format"
+msgstr ""
+
+msgid "Partition information"
+msgstr ""
+
+msgid "S.M.A.R.T Exception"
+msgstr ""
+
+msgid "Current status:"
+msgstr ""
+
+msgid "Address"
+msgstr ""
+
+msgid "Directory"
+msgstr ""

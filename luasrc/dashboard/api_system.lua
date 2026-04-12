@@ -1,5 +1,5 @@
 -- Dashboard System API
--- Handles: /system/status/, /u/system/version/, /system/check-update/, /system/reboot/
+-- Handles: /system/status/, /u/system/version/, /system/reboot/
 
 local u = require "luci.dashboard.util"
 
@@ -100,16 +100,6 @@ function M.version()
     result.kernelVersion = u.exec("uname -r"):gsub("%s+$", "")
 
     u.json_success(result)
-end
-
---- GET /system/check-update/
--- Returns empty (no OTA on generic OpenWrt)
-function M.check_update()
-    u.json_success({
-        hasUpdate = false,
-        currentVersion = "",
-        latestVersion = ""
-    })
 end
 
 --- POST /system/reboot/

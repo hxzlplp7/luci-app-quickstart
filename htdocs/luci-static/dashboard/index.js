@@ -1026,7 +1026,7 @@ var eF = Fa(Kt => {
                 })
             };
         c(), o.requestDeviceList(), setTimeout(() => {
-            n.requestCheckUpdate(), n.requestVersion(), s()
+            n.requestVersion(), s()
         }, 1100)
     };
     var Y = (e, a) => {
@@ -9684,7 +9684,7 @@ var eF = Fa(Kt => {
                     const v = X("router-link"),
                         g = X("icon-loading");
                         return i(), r("div", Hm, [D(v, {
-                            to: "/network",
+                            to: "/interfaceconfig",
                             custom: ""
                         }, {
                             default: V(({
@@ -9692,7 +9692,7 @@ var eF = Fa(Kt => {
                             }) => [t("button", {
                                 class: "btn_styles color2",
                                 onClick: q
-                            }, "Network Config", 8, Zm)]),
+                            }, "Network Interface", 8, Zm)]),
                             _: 1
                         }), //w(Vt)("ttyd") ? (i(), r("button", {
                             //key: 0,
