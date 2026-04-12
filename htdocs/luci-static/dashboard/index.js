@@ -1794,7 +1794,7 @@ var eF = Fa(Kt => {
                     o = Math.floor(e / 3600) % 24,
                     n = Math.floor(e / 60) % 60,
                     s = e % 60;
-                return a + " D, " + o + " H, " + (n < 10 ? "0" + n : n) + " M, " + (s < 10 ? "0" + s : s) + " S"
+                return a + "天" + o + "小时" + n + "分" + s + "秒"
             }
         },
         Si = e => /^\d+\.\d+\.\d+\.\d+$/.test(e),
@@ -3314,7 +3314,7 @@ var eF = Fa(Kt => {
         },
         td = ut(() => t("span", {
             class: "container_success"
-        }, "Connected", -1)),
+        }, "已联网", -1)),
         ed = {
             class: "container_time"
         },
@@ -6410,7 +6410,7 @@ var eF = Fa(Kt => {
         },
         e6 = ve(() => t("div", {
             class: "docker-item_name"
-        }, [t("span", null, "Directory")], -1)),
+        }, [t("span", null, "目录")], -1)),
         a6 = {
             class: "docker-item_value"
         },
@@ -8703,7 +8703,7 @@ var eF = Fa(Kt => {
         },
         O7 = _t(() => t("li", null, [t("a", {
             href: "/cgi-bin/luci/admin/system/flash"
-        }, "Backup / Flahs")], -1)),
+        }, "备份 / 刷新固件")], -1)),
         N7 = _t(() => t("li", null, [t("a", {
             href: "/cgi-bin/luci/admin/system/startup"
         }, "\u542F\u52A8\u9879")], -1)),
