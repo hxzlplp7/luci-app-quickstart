@@ -2457,7 +2457,7 @@ var eF = Fa(Kt => {
                     key: 1
                 }, [o.value ? (i(), r("div", _r, [t("div", hr, [xr, t("div", kr, h(e.title), 1), t("button", {
                     class: "close",
-                    title: "Close",
+                    title: "关闭",
                     onClick: n
                 }, [D(br)])]), t("div", wr, [Dt(s.$slots, "default", {}, void 0, !0)])])) : C("", !0)], 64))]))
             }
@@ -2483,7 +2483,7 @@ var eF = Fa(Kt => {
                 }, {
                     default: V(() => [Dt(a.$slots, "default")]),
                     _: 3
-                }, 8, ["Close", "type", "title"]))
+                }, 8, ["关闭", "type", "title"]))
             }
         }),
         Bt = e => (O("data-v-c4cdcce6"), e = e(), N(), e),
@@ -2673,17 +2673,17 @@ var eF = Fa(Kt => {
                     ])])])], 64))], 64)) : C("", !0), l.value ? (i(), r("div", Gr, h(l.value), 1)) : C("", !0)]), t("div", jr, [t("button", {
                         class: "cbi-button cbi-button-remove app-btn app-back",
                         onClick: b
-                    }, "Dismiss"), t("button", {
+                    }, "取消"), t("button", {
                         class: "cbi-button cbi-button-positive app-btn",
                         disabled: u.value
-                    }, "Save", 8, Rr)])], 40, Er)) : o.value == 1 ? (i(), r("div", Ur, [Wr, Hr, t("div", {
+                    }, "保存", 8, Rr)])], 40, Er)) : o.value == 1 ? (i(), r("div", Ur, [Wr, Hr, t("div", {
                         class: "actioner-dns_footer"
                     }, [t("button", {
                         class: "cbi-button cbi-button-remove app-btn app-back",
                         onClick: _
                     }, "Exit")])])) : C("", !0)]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var Jr = Y(Zr, [
@@ -3221,7 +3221,7 @@ var eF = Fa(Kt => {
                         ])])])]), t("div", Os, [t("button", {
                             class: "cbi-button cbi-button-apply app-btn",
                             disabled: n.value == ""
-                        }, "Save & Apply", 8, Ns), t("button", {
+                        }, "保存并应用", 8, Ns), t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: f
                         }, "Cancel")])], 40, $s)) : C("", !0), o.value == 1 ? (i(), r("form", qs, [Vs, t("div", Gs, [t("div", js, [D(De)]), Rs, t("div", {
@@ -3232,7 +3232,7 @@ var eF = Fa(Kt => {
                         }, "Exit")])])])) : C("", !0)]
                     }),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var Ws = Y(Us, [
@@ -4547,7 +4547,7 @@ var eF = Fa(Kt => {
                                 class: "cbi-button cbi-button-remove app-btn app-back",
                                 disabled: c.value,
                                 onClick: n
-                            }, "Dismiss", 8, fu), t("button", {
+                            }, "取消", 8, fu), t("button", {
                                 class: "cbi-button cbi-button-apply app-btn app-next",
                                 onClick: u,
                                 type: "button",
@@ -4806,7 +4806,7 @@ var eF = Fa(Kt => {
                         _: 1
                     })]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var Xu = Y(Ju, [
@@ -6206,7 +6206,7 @@ var eF = Fa(Kt => {
                         _: 1
                     })]),
                     _: 1
-                }, 8, ["Close"])) : C("", !0)
+                }, 8, ["关闭"])) : C("", !0)
             }
         });
     var h2 = Y(_2, [
@@ -6385,7 +6385,7 @@ var eF = Fa(Kt => {
         },
         R2 = ve(() => t("div", {
             class: "docker-item_name"
-        }, [t("span", null, "Status")], -1)),
+        }, [t("span", null, "状态")], -1)),
         U2 = {
             key: 0,
             class: "docker-item_value"
@@ -6780,13 +6780,13 @@ var eF = Fa(Kt => {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             type: "button",
                             onClick: _
-                        }, "Dismiss"), t("button", {
+                        }, "取消"), t("button", {
                             class: "cbi-button cbi-button-apply app-btn",
                             onClick: b
-                        }, "Save & Apply")])) : (i(), r("div", M6, [t("button", {
+                        }, "保存并应用")])) : (i(), r("div", M6, [t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: _
-                        }, "Close")]))])) : s.value == 1 ? (i(), r("div", O6, [N6, t("div", q6, [D(De)]), V6, t("div", {
+                        }, "关闭")]))])) : s.value == 1 ? (i(), r("div", O6, [N6, t("div", q6, [D(De)]), V6, t("div", {
                             class: "btns"
                         }, [t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
@@ -6810,7 +6810,7 @@ var eF = Fa(Kt => {
                         ]), X6])]), t("div", K6, [d.value ? (i(), r("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: g
-                        }, "Dismiss")) : C("", !0), t("button", {
+                        }, "取消")) : C("", !0), t("button", {
                             key: 0,
                             class: "cbi-button cbi-button-apply app-btn",
                             onClick: k
@@ -6822,7 +6822,7 @@ var eF = Fa(Kt => {
                         }, "Cancel"))])])) : C("", !0)]
                     }),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var t5 = Y(Q6, [
@@ -7674,7 +7674,7 @@ var eF = Fa(Kt => {
                         onClick: A
                     }, "\u786E\u5B9A")])])) : C("", !0)]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var S4 = Y(A4, [
@@ -8121,7 +8121,7 @@ var eF = Fa(Kt => {
                         onClick: s
                     }, h(e.continuerTitle), 1)) : C("", !0)])])]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var cp = Y(lp, [
@@ -8473,7 +8473,7 @@ var eF = Fa(Kt => {
                         target: o.value
                     }, null, 8, ["target"])) : C("", !0)])]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var Xp = Y(Jp, [
@@ -8693,7 +8693,7 @@ var eF = Fa(Kt => {
         T7 = {
             class: "app-container_title"
         },
-        I7 = _t(() => t("span", null, "System", -1)),
+        I7 = _t(() => t("span", null, "系统", -1)),
         L7 = {
             class: "more_icon",
             title: "View system information"
@@ -9182,10 +9182,10 @@ var eF = Fa(Kt => {
                     ])])])], 64)) : C("", !0)]), t("div", Lf, [t("button", {
                         class: "cbi-button cbi-button-remove app-btn app-back",
                         onClick: _
-                    }, "Dismiss"), t("button", {
+                    }, "取消"), t("button", {
                         class: "cbi-button cbi-button-positive app-btn",
                         disabled: s.value
-                    }, "Save", 8, Mf)])], 40, hf)) : o.value == 1 ? (i(), r("div", Of, [Nf, t("div", qf, [d.value == "success" ? (i(), r("div", Vf, [Gf, jf, t("a", {
+                    }, "保存", 8, Mf)])], 40, hf)) : o.value == 1 ? (i(), r("div", Of, [Nf, t("div", qf, [d.value == "success" ? (i(), r("div", Vf, [Gf, jf, t("a", {
                         href: c.value,
                         class: "NewAdress"
                     }, "Jump to new address after " + h(p.value), 9, Rf)])) : d.value == "fail" ? (i(), r("div", Uf, [Wf, Hf, Zf, t("button", {
@@ -9196,7 +9196,7 @@ var eF = Fa(Kt => {
                         onClick: v
                     }, "Refresh page")])) : C("", !0)])])) : C("", !0)]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var em = Y(tm, [
@@ -9450,7 +9450,7 @@ var eF = Fa(Kt => {
                             onClick: k
                         }, "\u53D6\u6D88")])])) : C("", !0)]),
                         _: 1
-                    }, 8, ["Close"])
+                    }, 8, ["关闭"])
                 }
             }
         });
@@ -9585,7 +9585,7 @@ var eF = Fa(Kt => {
                         class: "cbi-button cbi-button-apply app-btn",
                         onClick: c,
                         disabled: n.value
-                    }, "Save & Apply", 8, Vm), t("button", {
+                    }, "保存并应用", 8, Vm), t("button", {
                         class: "cbi-button cbi-button-apply app-btn",
                         onClick: p,
                         disabled: n.value
@@ -9598,7 +9598,7 @@ var eF = Fa(Kt => {
                         onClick: d
                     }, "\u53D6\u6D88")])])) : C("", !0)]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var Um = Y(Rm, [
@@ -9698,8 +9698,8 @@ var eF = Fa(Kt => {
                             //key: 0,
                             //class: "btn_styles color2 app-btn-ttyd",
                             //onClick: m
-                        //}, "Terminal")) : C("", !0), w(Vt)("ota") ? (i(), r("button", Jm, [Xm, w(a).checkUpdate == null ? (i(), r("span", Km, [D(g, {
-                        w(Vt)("ota") ? (i(), r("button", Jm, [Xm, w(a).checkUpdate == null ? (i(), r("span", Km, [D(g, {
+                        //}, "Terminal")) : C("", !0), false ? (i(), r("button", Jm, [Xm, w(a).checkUpdate == null ? (i(), r("span", Km, [D(g, {
+                        false ? (i(), r("button", Jm, [Xm, w(a).checkUpdate == null ? (i(), r("span", Km, [D(g, {
                             size: "0.8em",
                             color: "currentColor"
                         })])) : (k = w(a).checkUpdate) != null && k.needUpdate ? (i(), r("i", Qm)) : C("", !0)])) : C("", !0), t("button", {
@@ -10058,7 +10058,7 @@ var eF = Fa(Kt => {
                     }, 8, ["modelValue"])])) : C("", !0), n.value ? (i(), r("div", bb, h(n.value), 1)) : C("", !0), t("div", vb, [t("button", {
                         class: "cbi-button cbi-button-apply app-btn app-next",
                         disabled: s.value
-                    }, "Save & Apply", 8, gb), D(b, {
+                    }, "保存并应用", 8, gb), D(b, {
                         to: "/network",
                         custom: ""
                     }, {
@@ -10383,7 +10383,7 @@ var eF = Fa(Kt => {
                     }, 8, ["modelValue"])])) : C("", !0), n.value ? (i(), r("div", rv, h(n.value), 1)) : C("", !0), t("div", sv, [t("button", {
                         class: "cbi-button cbi-button-apply app-btn app-next",
                         disabled: p.value
-                    }, "Save & Apply", 8, dv), D(B, {
+                    }, "保存并应用", 8, dv), D(B, {
                         to: "/network",
                         custom: ""
                     }, {
@@ -10496,7 +10496,7 @@ var eF = Fa(Kt => {
         },
         qv = lt(() => t("button", {
             class: "cbi-button cbi-button-apply app-btn app-next"
-        }, "Save & Apply", -1)),
+        }, "保存并应用", -1)),
         Vv = ["onClick"],
         Gv = {
             key: 2,
@@ -11443,27 +11443,27 @@ var eF = Fa(Kt => {
                     default: V(() => [t("div", j_, [e.setup == "create" ? (i(), M(Ig, {
                         key: 0,
                         Close: e.Close
-                    }, null, 8, ["Close"])) : e.setup == "info" && e.raid != null ? (i(), M(qg, {
+                    }, null, 8, ["关闭"])) : e.setup == "info" && e.raid != null ? (i(), M(qg, {
                         key: 1,
                         Close: e.Close,
                         raid: e.raid,
                         success: e.success
-                    }, null, 8, ["Close", "raid", "success"])) : e.setup == "edit" && e.raid != null ? (i(), M(s_, {
+                    }, null, 8, ["关闭", "raid", "success"])) : e.setup == "edit" && e.raid != null ? (i(), M(s_, {
                         key: 2,
                         Close: e.Close,
                         raid: e.raid,
                         success: e.success
-                    }, null, 8, ["Close", "raid", "success"])) : e.setup == "remove" && e.raid != null ? (i(), M(y_, {
+                    }, null, 8, ["关闭", "raid", "success"])) : e.setup == "remove" && e.raid != null ? (i(), M(y_, {
                         key: 3,
                         Close: e.Close,
                         raid: e.raid,
                         success: e.success
-                    }, null, 8, ["Close", "raid", "success"])) : e.setup == "recover" && e.raid != null ? (i(), M(G_, {
+                    }, null, 8, ["关闭", "raid", "success"])) : e.setup == "recover" && e.raid != null ? (i(), M(G_, {
                         key: 4,
                         Close: e.Close,
                         raid: e.raid,
                         success: e.success
-                    }, null, 8, ["Close", "raid", "success"])) : C("", !0)])]),
+                    }, null, 8, ["关闭", "raid", "success"])) : C("", !0)])]),
                     _: 1
                 }))
             }
@@ -12046,11 +12046,11 @@ var eF = Fa(Kt => {
                         class: "cbi-button cbi-button-remove",
                         onClick: s,
                         disabled: o.value
-                    }, "Dismiss", 8, ax), t("button", {
+                    }, "取消", 8, ax), t("button", {
                         class: "cbi-button cbi-button-apply",
                         onClick: c,
                         disabled: o.value
-                    }, "Save & Apply", 8, ox)])])]),
+                    }, "保存并应用", 8, ox)])])]),
                     _: 1
                 }))
             }
@@ -12272,7 +12272,7 @@ var eF = Fa(Kt => {
                         class: "cbi-button cbi-button-apply",
                         onClick: f,
                         disabled: o.value
-                    }, "Save & Apply", 8, Ux)])])]),
+                    }, "保存并应用", 8, Ux)])])]),
                     _: 1
                 }))
             }
@@ -12364,7 +12364,7 @@ var eF = Fa(Kt => {
                         class: "button cbi-button cbi-button-remove",
                         onClick: d,
                         disabled: o.value
-                    }, "Close", 8, tk), o.value ? C("", !0) : (i(), r("div", {
+                    }, "关闭", 8, tk), o.value ? C("", !0) : (i(), r("div", {
                         key: 0,
                         class: "button cbi-button cbi-button-apply",
                         onClick: l,
@@ -12729,7 +12729,7 @@ var eF = Fa(Kt => {
         }, "Temp"), t("th", {
             class: "th cbi-section-table-cell",
             "data-widget": "value"
-        }, "Status"), t("th", {
+        }, "状态"), t("th", {
             class: "th cbi-section-table-cell",
             "data-widget": "value"
         }, "Health"), t("th", {
@@ -12892,7 +12892,7 @@ var eF = Fa(Kt => {
                 }, [t("input", {
                     class: "cbi-button cbi-button-apply",
                     type: "button",
-                    value: "Save & Apply",
+                    value: "保存并应用",
                     onClick: f
                 })])], 64))
             }
@@ -13155,12 +13155,12 @@ var eF = Fa(Kt => {
                     ])])])]), t("div", dy, [t("button", {
                         class: "cbi-button cbi-button-remove app-btn app-back",
                         onClick: c
-                    }, "Dismiss"), t("button", {
+                    }, "取消"), t("button", {
                         class: "cbi-button cbi-button-positive app-btn",
                         disabled: o.value
-                    }, "Save", 8, uy)])], 40, Hw)]),
+                    }, "保存", 8, uy)])], 40, Hw)]),
                     _: 1
-                }, 8, ["Close"]))
+                }, 8, ["关闭"]))
             }
         });
     var cy = Y(ly, [
@@ -13461,7 +13461,7 @@ var eF = Fa(Kt => {
                 })])])])])]), t("div", Jy, [t("input", {
                     class: "btn cbi-button cbi-button-apply",
                     type: "button",
-                    value: "Save & Apply",
+                    value: "保存并应用",
                     onClick: u,
                     disabled: o.value
                 }, null, 8, Xy)])])]))
