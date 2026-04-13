@@ -5450,16 +5450,14 @@ var eF = Fa(Kt => {
                         raids: []
                     });
                 (() => T(this, null, function* () {
-                    const b = yield Promise.all([S.Nas.Disk.Status.GET(), S.Raid.List.GET()]);
+                    const b = yield Promise.allSettled([S.Nas.Disk.Status.GET(), S.Raid.List.GET()]);
                     try {
-                        if (b[0]) {
-                            const _ = b[0];
-                            _ != null && _.data.result && (n.disks = (_ == null ? void 0 : _.data.result.disks) || [])
-                        }
-                        if (b[1]) {
-                            const _ = b[1];
-                            _.data.result && (n.raids = _.data.result.disks || [])
-                        }
+                        const _ = b[0],
+                            g = b[1];
+                        _ != null && _.status === "fulfilled" && _.value && (_.value != null && _.value.data.result && (n.disks = (_.value == null ? void 0 : _.value.data.result.disks) || []));
+                        g != null && g.status === "fulfilled" && g.value && g.value.data.result && (n.raids = g.value.data.result.disks || []);
+                        _ != null && _.status === "rejected" && F.Warning(_.reason);
+                        g != null && g.status === "rejected" && F.Warning(g.reason)
                     } catch (_) {
                         F.Warning(_)
                     }
