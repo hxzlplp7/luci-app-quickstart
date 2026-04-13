@@ -9,20 +9,15 @@ def patch_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # Technical Localization for v1.3.0
+    # Technical Localization for v1.3.1
     replacements = {
-        '"Not Installed"': '"未安装"',
-        '"not installed"': '"未安装"',
-        '"stopped"': '"已停止"',
-        '"running"': '"运行中"',
-        'Link status: Down': '连接状态：已断开',
-        'Link status: Up': '连接状态：已连接',
-        'Upload': '上传',
-        'Download': '下载',
-        'Real-time speed': '实时速率',
-        'Historical stats': '历史统计',
-        'Status: ': '状态：',
-        'Type: ': '类型：'
+        '"\u5185\u7f51\u6d4b\u901f"': '"内网配置"', # Intranet Speed Test -> Intranet Config
+        'IPv4 Address': 'IPv4 地址',
+        'IPv4 Subnet mask': 'IPv4 子网掩码',
+        'Save': '保存',
+        'Cancel': '取消',
+        'Not Installed': '未安装',
+        'not installed': '未安装'
     }
 
     # Apply replacements
@@ -39,4 +34,3 @@ def patch_file(file_path):
 
 if __name__ == "__main__":
     patch_file("htdocs/luci-static/dashboard/index.js")
-    patch_file("luasrc/view/dashboard/main.htm")

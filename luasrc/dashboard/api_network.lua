@@ -568,6 +568,23 @@ function M.status()
 
     result.uptimeStamp = wan.uptime or 0
 
+    -- Public IP Detection (v1.3.1)
+    local public_ip = ""
+    local cache_file = "/tmp/public_ip.txt"
+    local now = os.time()
+    local f = io.open(cache_file, "r")
+    if f then
+        public_ip = f:read("*a"):gsub("%s+", "")
+        f:close()
+    end
+
+    -- Trigger background update if cache is empty or older than 10 mins
+    local last_update = (util.lsblk and util.lsblk.mtime) and util.lsblk.mtime(cache_file) or 0
+    if public_ip == "" or (now - last_update > 600) then
+        os.execute("curl -skL https://ipleak.net/json/ | jsonfilter -e '@.ip' > " .. cache_file .. " 2>/dev/null &")
+    end
+    result.publicIP = public_ip
+
     if wan.up or result.ipv4addr ~= "" or result.ipv6addr ~= "" or #result.dnsList > 0 then
         result.networkInfo = (#result.dnsList > 0) and "netSuccess" or "dnsFailed"
     else

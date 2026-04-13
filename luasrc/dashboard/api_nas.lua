@@ -293,7 +293,9 @@ function M.disk_status()
             end
         end
 
-        if size_total > 0 then
+        -- Note: For v1.3.1, we keep disk.isSystemRoot = true for partition level identification
+        -- but if the UI is hiding it, we could try to force it false for the parent disk entry
+        -- actually, the user wants to identify the disk, so we ensure children are available.
             disk.total = human_size(size_total)
             disk.used = human_size(used_total)
             disk.usage = math.floor((used_total * 100) / size_total)

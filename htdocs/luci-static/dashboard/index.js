@@ -2354,7 +2354,7 @@ var eF = Fa(Kt => {
                         if (p) F.Warning(p);
                         else if (c) {
                             if (c.status == "installed") return !0;
-                            if (confirm(`It has been detected that you have not installed ${a} plug-in, do you want to install it?`)) {
+                            if (confirm(`It has been detected that you have 未安装 ${a} plug-in, do you want to install it?`)) {
                                 n = F.Loading("正在安装...");
                                 const f = yield ct.installApp(o || e);
                                 if (n.Close(), f) return !0;
@@ -8854,7 +8854,7 @@ var eF = Fa(Kt => {
         hf = ["onSubmit"],
         xf = mt(() => t("div", {
             class: "actioner-dns_header"
-        }, [t("span", null, "内网测速")], -1)),
+        }, [t("span", null, "内网配置")], -1)),
         kf = {
             class: "actioner-dns_body"
         },
@@ -8863,7 +8863,7 @@ var eF = Fa(Kt => {
         },
         yf = mt(() => t("div", {
             class: "label-item_key"
-        }, [t("span", null, "IPv4 Address")], -1)),
+        }, [t("span", null, "IPv4 地址")], -1)),
         Ff = {
             class: "label-item_value"
         },
@@ -8872,7 +8872,7 @@ var eF = Fa(Kt => {
         },
         Cf = mt(() => t("div", {
             class: "label-item_key"
-        }, [t("span", null, "IPv4 Subnet mask")], -1)),
+        }, [t("span", null, "IPv4 子网掩码")], -1)),
         $f = {
             class: "label-item_value"
         },
@@ -9040,11 +9040,11 @@ var eF = Fa(Kt => {
                 const m = () => {
                         const g = n.value;
                         if (!xt.isValidIP(g.lanIp)) {
-                            F.Warning("IPv4 Address format ERROR!!");
+                            F.Warning("IPv4 地址 format ERROR!!");
                             return
                         }
                         if (!xt.isValidMask(g.netMask)) {
-                            F.Warning("IPv4 Subnet mask format ERROR!!");
+                            F.Warning("IPv4 子网掩码 format ERROR!!");
                             return
                         }
                         const k = xt.calcMaskRange(g.lanIp, g.netMask);
@@ -9053,11 +9053,11 @@ var eF = Fa(Kt => {
                     b = () => {
                         const g = n.value;
                         if (!xt.isValidIP(g.lanIp)) {
-                            F.Warning("IPv4 Address format ERROR!!");
+                            F.Warning("IPv4 地址 format ERROR!!");
                             return
                         }
                         if (!xt.isValidMask(g.netMask)) {
-                            F.Warning("IPv4 Subnet mask format ERROR!!");
+                            F.Warning("IPv4 子网掩码 format ERROR!!");
                             return
                         }
                         if (g.enableDhcp && !xt.isValidIP(g.dhcpStart) || !xt.isValidIP(g.dhcpEnd) || !xt.isValidMaskRange(g.lanIp, g.netMask, g.dhcpStart, g.dhcpEnd)) {
@@ -9662,7 +9662,7 @@ var eF = Fa(Kt => {
                         }), t("button", {
                             class: "btn_styles color4",
                             onClick: l
-                        }, "内网测速"), t("button", {
+                        }, "内网配置"), t("button", {
                             class: "btn_styles color5",
                             onClick: c,
                             disabled: !((x = w(n)) != null && x.proto)
