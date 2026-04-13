@@ -568,20 +568,30 @@ function M.status()
 
     result.uptimeStamp = wan.uptime or 0
 
-    -- Public IP Detection (v1.3.1)
+    -- Public IP Detection (v1.3.2)
     local public_ip = ""
     local cache_file = "/tmp/public_ip.txt"
     local now = os.time()
     local f = io.open(cache_file, "r")
     if f then
-        public_ip = f:read("*a"):gsub("%s+", "")
+        local raw = f:read("*a")
         f:close()
+        local sip = raw:match("ip=([^%s\n]+)")
+        local country = raw:match("country=([^%s\n]+)")
+        local isp = raw:match("isp=([^%s\n]+)")
+        
+        if sip then
+            public_ip = sip
+            if country or isp then
+                public_ip = public_ip .. " (" .. (country or "") .. (isp and (" " .. isp) or "") .. ")"
+            end
+        end
     end
 
     -- Trigger background update if cache is empty or older than 10 mins
     local last_update = (util.lsblk and util.lsblk.mtime) and util.lsblk.mtime(cache_file) or 0
     if public_ip == "" or (now - last_update > 600) then
-        os.execute("curl -skL https://ipleak.net/json/ | jsonfilter -e '@.ip' > " .. cache_file .. " 2>/dev/null &")
+        os.execute("curl -skL https://ipleak.net/json/ | jsonfilter -e 'ip=@.ip' -e 'country=@.country_name' -e 'isp=@.isp_name' > " .. cache_file .. " 2>/dev/null &")
     end
     result.publicIP = public_ip
 

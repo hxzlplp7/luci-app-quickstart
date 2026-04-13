@@ -239,6 +239,44 @@ function M.disk_status()
         end
     end
 
+    -- Fallback for eMMC (mmcblk) if not found by lsblk
+    if u.file_exists("/sys/block") then
+        local blocks = u.exec("ls -1 /sys/block")
+        for name in blocks:gmatch("[^\n]+") do
+            if name:match("^mmcblk%d+$") and not disk_map[name] then
+                local path = "/dev/" .. name
+                local size_bytes = tonumber(u.read_file("/sys/block/" .. name .. "/size") or "0") * 512
+                local model = (u.read_file("/sys/block/" .. name .. "/device/model") or name):gsub("%s+$", "")
+                
+                local disk = {
+                    name = name,
+                    path = path,
+                    size = human_size(size_bytes),
+                    venderModel = model,
+                    serialNumber = "N/A",
+                    childrens = {},
+                    used = human_size(0),
+                    total = human_size(0),
+                    usage = 0,
+                    isSystemRoot = false,
+                    isDockerRoot = false,
+                    smartWarning = false,
+                    temperature = ""
+                }
+                disks[#disks + 1] = disk
+                disk_map[name] = disk
+                
+                -- Simple partition scan for fallback disk
+                local parts = u.exec("ls -1 /dev/" .. name .. "p* 2>/dev/null")
+                for ppath in parts:gmatch("[^\n]+") do
+                    local pname = ppath:match("([^/]+)$")
+                    local pentry = { NAME = pname, PATH = ppath, TYPE = "part" }
+                    disk.childrens[#disk.childrens + 1] = build_partition(pentry, df_map, mount_map, docker_mountpoint)
+                end
+            end
+        end
+    end
+
     for _, disk in ipairs(disks) do
         local used_total = 0
         local size_total = 0
