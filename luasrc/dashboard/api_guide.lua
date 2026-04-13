@@ -307,20 +307,35 @@ function M.docker_status()
     local result = {
         installed = false,
         running = false,
-        enabled = false,
+        status = "not installed",
         dataDir = "/opt/docker",
         dataDevice = "",
-        dataUsage = ""
+        dataUsage = "",
+        containers = 0,
+        runningCount = 0,
+        images = 0
     }
 
     if u.file_exists("/etc/init.d/dockerd") then
         result.installed = true
-
-        -- Check if enabled
-        result.enabled = os.execute("/etc/init.d/dockerd enabled >/dev/null 2>&1") == 0
+        result.status = "stopped"
 
         -- Check if running
-        result.running = os.execute("pgrep -x dockerd >/dev/null 2>&1") == 0
+        if os.execute("pgrep -x dockerd >/dev/null 2>&1") == 0 then
+            result.running = true
+            result.status = "running"
+            
+            -- Get detailed stats if docker command is available
+            if u.file_exists("/usr/bin/docker") then
+                local running = u.exec("docker ps -q | wc -l")
+                local total = u.exec("docker ps -aq | wc -l")
+                local images = u.exec("docker images -q | wc -l")
+                
+                result.runningCount = tonumber(running) or 0
+                result.containers = tonumber(total) or 0
+                result.images = tonumber(images) or 0
+            end
+        end
 
         -- Get data directory
         local uci = require("luci.model.uci").cursor()

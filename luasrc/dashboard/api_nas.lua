@@ -196,25 +196,30 @@ function M.disk_status()
         mount_map[mount.mountpoint] = mount
     end
 
-    local lsblk_out = u.exec("lsblk -P -b -o NAME,PATH,PKNAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,MODEL,RO,UUID 2>/dev/null")
+    local lsblk_out = u.exec("lsblk -P -b -o NAME,PATH,PKNAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,MODEL,RO,UUID,SERIAL 2>/dev/null")
     for line in lsblk_out:gmatch("[^\n]+") do
         local entry = parse_key_value_line(line)
         local devtype = entry.TYPE
 
         if devtype == "disk" and should_keep_disk(entry) then
             local path = entry.PATH ~= "" and entry.PATH or ("/dev/" .. entry.NAME)
+            local model = (entry.MODEL and entry.MODEL:gsub("^%s+", ""):gsub("%s+$", "")) ~= "" and entry.MODEL:gsub("^%s+", ""):gsub("%s+$", "") or entry.NAME
+            local serial = (entry.SERIAL and entry.SERIAL:gsub("^%s+", ""):gsub("%s+$", "")) ~= "" and entry.SERIAL or "N/A"
+            
             local disk = {
                 name = entry.NAME,
                 path = path,
                 size = human_size(entry.SIZE),
-                venderModel = (entry.MODEL and entry.MODEL:gsub("^%s+", ""):gsub("%s+$", "")) ~= "" and entry.MODEL:gsub("^%s+", ""):gsub("%s+$", "") or entry.NAME,
+                venderModel = model,
+                serialNumber = serial,
                 childrens = {},
                 used = human_size(0),
                 total = human_size(0),
                 usage = 0,
                 isSystemRoot = false,
                 isDockerRoot = false,
-                smartWarning = false
+                smartWarning = false,
+                temperature = ""
             }
 
             disks[#disks + 1] = disk

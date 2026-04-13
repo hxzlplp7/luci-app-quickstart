@@ -3211,7 +3211,7 @@ var eF = Fa(Kt => {
                         }, "保存并应用", 8, Ns), t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: f
-                        }, "Cancel")])], 40, $s)) : C("", !0), o.value == 1 ? (i(), r("form", qs, [Vs, t("div", Gs, [t("div", js, [D(De)]), Rs, t("div", {
+                        }, "取消")])], 40, $s)) : C("", !0), o.value == 1 ? (i(), r("form", qs, [Vs, t("div", Gs, [t("div", js, [D(De)]), Rs, t("div", {
                             class: "btns"
                         }, [t("button", {
                             class: "cbi-button cbi-button-apply softsource_successed",
@@ -3707,9 +3707,9 @@ var eF = Fa(Kt => {
                             (q = ($ = G == null ? void 0 : G.data) == null ? void 0 : $.result) != null && q.port ? ss({
                                 port: G.data.result.port,
                                 setup: 0
-                            }) : ((H = G == null ? void 0 : G.data) == null ? void 0 : H.success) == 0 ? location.href = "/cgi-bin/luci/admin/services/homebox" : F.Warning("Startup failed")
+                            }) : ((H = G == null ? void 0 : G.data) == null ? void 0 : H.success) == 0 ? location.href = "/cgi-bin/luci/admin/services/homebox" : F.Warning("启动失败")
                         } catch (G) {
-                            F.Warning("Startup failed")
+                            F.Warning("启动失败")
                         }
                     }),
                     B = () => {
@@ -4075,10 +4075,10 @@ var eF = Fa(Kt => {
                 Close: {
                     type: Function
                 },
-                Cancel: {
+                取消: {
                     type: Function
                 },
-                Next: {
+                下一步: {
                     type: Function
                 }
             },
@@ -4088,10 +4088,10 @@ var eF = Fa(Kt => {
                         a.Close && a.Close()
                     },
                     n = x => {
-                        x.preventDefault(), a.Cancel && a.Cancel(), o()
+                        x.preventDefault(), a.取消 && a.取消(), o()
                     },
                     s = x => {
-                        a.Next && a.Next(x), o()
+                        a.下一步 && a.下一步(x), o()
                     },
                     c = y(!1),
                     p = y(0),
@@ -4133,7 +4133,7 @@ var eF = Fa(Kt => {
                             return
                         }
                         if (x) {
-                            if (!confirm(`WARNING: This operation will initialize ${x.venderModel} hard disk and create partitions, please operate with caution`) || !confirm("确定要初始化吗？")) return;
+                            if (!confirm(`警告：此操作将初始化 ${x.venderModel} 硬盘并创建分区，请谨慎操作`) || !confirm("确定要初始化吗？")) return;
                             v(x);
                             return
                         }
@@ -4223,14 +4223,14 @@ var eF = Fa(Kt => {
                                 onClick: n,
                                 type: "button",
                                 disabled: c.value
-                            }, "Cancel", 8, N0), t("button", {
+                            }, "取消", 8, N0), t("button", {
                                 class: "cbi-button cbi-button-apply app-btn app-next",
                                 disabled: c.value
-                            }, "Next", 8, q0)])], 40, _0)) : p.value == 1 ? (i(), r("div", V0, [t("div", G0, [j0, R0, l.value ? (i(), r("div", U0, [U(h(l.value.venderModel) + " has been successfully formatted and mount to ", 1), t("a", null, h((A = u.value) == null ? void 0 : A.mountPoint), 1)])) : C("", !0), u.value ? (i(), r("div", W0, [H0, t("a", null, h(u.value.mountPoint), 1)])) : C("", !0), t("div", Z0, [t("button", {
+                            }, "下一步", 8, q0)])], 40, _0)) : p.value == 1 ? (i(), r("div", V0, [t("div", G0, [j0, R0, l.value ? (i(), r("div", U0, [U(h(l.value.venderModel) + " has been successfully formatted and mount to ", 1), t("a", null, h((A = u.value) == null ? void 0 : A.mountPoint), 1)])) : C("", !0), u.value ? (i(), r("div", W0, [H0, t("a", null, h(u.value.mountPoint), 1)])) : C("", !0), t("div", Z0, [t("button", {
                                 class: "cbi-button cbi-button-apply app-btn app-next",
                                 type: "button",
                                 onClick: k
-                            }, h(e.action == "nas" ? "Next" : "Finish"), 1)])])])) : C("", !0)]
+                            }, h(e.action == "nas" ? "下一步" : "完成"), 1)])])])) : C("", !0)]
                         }),
                         _: 1
                     })]),
@@ -4441,10 +4441,10 @@ var eF = Fa(Kt => {
                 Close: {
                     type: Function
                 },
-                Cancel: {
+                取消: {
                     type: Function
                 },
-                Next: {
+                下一步: {
                     type: Function
                 }
             },
@@ -4455,10 +4455,10 @@ var eF = Fa(Kt => {
                         a.Close && a.Close()
                     },
                     n = v => {
-                        v.preventDefault(), a.Cancel && a.Cancel(), o()
+                        v.preventDefault(), a.取消 && a.取消(), o()
                     },
                     s = v => {
-                        a.Next && a.Next(v), o()
+                        a.下一步 && a.下一步(v), o()
                     },
                     c = y(!1),
                     p = y(0),
@@ -4539,11 +4539,11 @@ var eF = Fa(Kt => {
                                 onClick: u,
                                 type: "button",
                                 disabled: c.value
-                            }, "Next", 8, mu)])], 40, K0)) : p.value == 1 ? (i(), r("div", bu, [t("div", vu, [gu, _u, l.value ? (i(), r("div", hu, [U("Partition " + h(l.value.path) +" was successful mounted to ", 1), t("a", null, h(l.value.mountPoint), 1)])) : C("", !0), t("div", xu, [t("button", {
+                            }, "下一步", 8, mu)])], 40, K0)) : p.value == 1 ? (i(), r("div", bu, [t("div", vu, [gu, _u, l.value ? (i(), r("div", hu, [U("Partition " + h(l.value.path) +" was successful mounted to ", 1), t("a", null, h(l.value.mountPoint), 1)])) : C("", !0), t("div", xu, [t("button", {
                                 class: "cbi-button cbi-button-apply app-btn app-next",
                                 type: "button",
                                 onClick: m
-                            }, h(e.action == "nas" ? "Finish" : "Next"), 1)])])])) : C("", !0)]
+                            }, h(e.action == "nas" ? "完成" : "下一步"), 1)])])])) : C("", !0)]
                         }),
                         _: 1
                     })]),
@@ -4658,8 +4658,8 @@ var eF = Fa(Kt => {
                             action: "disk",
                             disk: a.disk,
                             mount: a.part,
-                            Cancel: () => {},
-                            Next: l => {
+                            取消: () => {},
+                            下一步: l => {
                                 location.reload()
                             }
                         })
@@ -4669,8 +4669,8 @@ var eF = Fa(Kt => {
                             action: "nas",
                             disk: a.disk,
                             mount: a.part,
-                            Cancel: () => {},
-                            Next: () => {
+                            取消: () => {},
+                            下一步: () => {
                                 location.reload()
                             }
                         })
@@ -4722,7 +4722,7 @@ var eF = Fa(Kt => {
                     }, "Format Partition")) : C("", !0)])]), e.part.mountPoint ? (i(), r("li", zu, [t("span", Pu, [t("a", {
                         href: w(d),
                         target: "_blank"
-                    }, h(e.part.mountPoint), 9, Tu)]), t("div", Iu, [t("div", Lu, [t("div", null, "Disk status: " + h(e.part.isReadOnly ? "Read only" : "Read and write"), 1), !e.part.isSystemRoot && e.part.isReadOnly ? (i(), r("div", Mu, [D(gt), Ou])) : C("", !0)]), t("div", Nu, [t("div", null, "Disk format: " + h((b = e.part.filesystem) == null ? void 0 : b.toUpperCase()), 1), e.part.filesystem == "ntfs" ? (i(), r("div", qu, [D(gt), Vu])) : C("", !0)])])])) : C("", !0)])
+                    }, h(e.part.mountPoint), 9, Tu)]), t("div", Iu, [t("div", Lu, [t("div", null, "磁盘状态：" + h(e.part.isReadOnly ? "只读" : "读写"), 1), !e.part.isSystemRoot && e.part.isReadOnly ? (i(), r("div", Mu, [D(gt), Ou])) : C("", !0)]), t("div", Nu, [t("div", null, "磁盘格式：" + h((b = e.part.filesystem) == null ? void 0 : b.toUpperCase()), 1), e.part.filesystem == "ntfs" ? (i(), r("div", qu, [D(gt), Vu])) : C("", !0)])])])) : C("", !0)])
                 }
             }
         });
@@ -4755,10 +4755,10 @@ var eF = Fa(Kt => {
                 Close: {
                     type: Function
                 },
-                Cancel: {
+                取消: {
                     type: Function
                 },
-                Next: {
+                下一步: {
                     type: Function
                 }
             },
@@ -4769,7 +4769,7 @@ var eF = Fa(Kt => {
                         a.Close && a.Close()
                     },
                     s = c => {
-                        c.preventDefault(), a.Cancel && a.Cancel(), n()
+                        c.preventDefault(), a.取消 && a.取消(), n()
                     };
                 return (c, p) => (i(), M(et, {
                     Close: e.Close,
@@ -4779,7 +4779,7 @@ var eF = Fa(Kt => {
                         name: "rotate",
                         mode: "out-in"
                     }, {
-                        default: V(() => [o.value == 0 ? (i(), r("div", Ru, [t("div", Uu, "Partition Information - " + h((e.disk.name || "?") + (e.disk.isSystemRoot ? " (System disk)" : "")), 1), t("ul", null, [t("li", null, [Wu, t("div", Hu, [(i(!0), r(L, null, j(e.disk.childrens, (f, d) => (i(), M(ju, {
+                        default: V(() => [o.value == 0 ? (i(), r("div", Ru, [t("div", Uu, "分区信息 - " + h((e.disk.name || "?") + (e.disk.isSystemRoot ? " (系统盘)" : "")), 1), t("ul", null, [t("li", null, [Wu, t("div", Hu, [(i(!0), r(L, null, j(e.disk.childrens, (f, d) => (i(), M(ju, {
                             key: d,
                             part: f,
                             disk: e.disk
@@ -4874,7 +4874,7 @@ var eF = Fa(Kt => {
             class: "tooltip-text tooltip-top"
         }, [t("span", {
             class: "disk_dir_tip"
-        }, "Your system space is insufficient. It is detected that your docker root directory is located on system root directory, which may affect the normal operation of the system. Recommended to use Docker migration wizard to migrate docker root directory to an external hard disk.")])], -1)),
+        }, "系统空间不足。检测到您的 Docker 根目录位于系统分区上, 这可能会影响系统正常运行。建议使用 Docker 迁移向导 to 将 Docker 目录迁移到外部硬盘。")])], -1)),
         gl = {
             key: 1,
             class: "tooltip-trigger"
@@ -4948,8 +4948,8 @@ var eF = Fa(Kt => {
                         Be({
                             action: "disk",
                             disk: a.disk,
-                            Cancel: () => {},
-                            Next: () => {
+                            取消: () => {},
+                            下一步: () => {
                                 location.reload()
                             }
                         })
@@ -4958,8 +4958,8 @@ var eF = Fa(Kt => {
                         Ku({
                             action: "disk",
                             disk: a.disk,
-                            Cancel: () => {},
-                            Next: () => {
+                            取消: () => {},
+                            下一步: () => {
                                 location.reload()
                             }
                         })
@@ -4971,8 +4971,8 @@ var eF = Fa(Kt => {
                             action: "nas",
                             disk: f,
                             mount: d[0],
-                            Cancel: () => {},
-                            Next: () => {
+                            取消: () => {},
+                            下一步: () => {
                                 location.reload()
                             }
                         })
@@ -5432,10 +5432,10 @@ var eF = Fa(Kt => {
         }, null, -1)),
         H1 = P({
             props: {
-                Cancel: {
+                取消: {
                     type: Function
                 },
-                Next: {
+                下一步: {
                     type: Function
                 },
                 Close: {
@@ -5473,10 +5473,10 @@ var eF = Fa(Kt => {
                         a.Close && a.Close()
                     },
                     l = () => {
-                        a.Cancel && a.Cancel(), d()
+                        a.取消 && a.取消(), d()
                     },
                     u = b => {
-                        a.Next && a.Next(b), d()
+                        a.下一步 && a.下一步(b), d()
                     },
                     m = () => {
                         if (c.value == null) {
@@ -5495,10 +5495,10 @@ var eF = Fa(Kt => {
                             action: "nas",
                             disk: c.value,
                             mount: p.value,
-                            Cancel: () => {
+                            取消: () => {
                                 o.value = !0
                             },
-                            Next: b => {
+                            下一步: b => {
                                 u(b)
                             }
                         })
@@ -6135,10 +6135,10 @@ var eF = Fa(Kt => {
                     }),
                     m = () => {
                         s.value = !1, o.value = !1, J1({
-                            Cancel: () => {
+                            取消: () => {
                                 o.value = !0
                             },
-                            Next: g => {
+                            下一步: g => {
                                 switch (n.value) {
                                     case "webdav":
                                         _(g);
@@ -6632,7 +6632,7 @@ var eF = Fa(Kt => {
         },
         Z6 = pt(() => t("label", {
             for: "move"
-        }, [t("li", {class: "option_title"}, "Replace directory"), t("li", {class: "option_info"}, "Do not overwrite the target path, only modify docker directory to target path")], -1)),
+        }, [t("li", {class: "option_title"}, "替换目录"), t("li", {class: "option_info"}, "不覆盖目标路径，仅将 Docker 目录修改为目标路径")], -1)),
         J6 = {
             class: "moves"
         },
@@ -6729,7 +6729,7 @@ var eF = Fa(Kt => {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             type: "button",
                             onClick: _
-                        }, "Cancel")])])) : s.value == 0 ? (i(), r("div", x6, [t("div", {
+                        }, "取消")])])) : s.value == 0 ? (i(), r("div", x6, [t("div", {
                             class: "action-header"
                         }, [k6]), t("div", {
                             class: "action-body"
@@ -6799,7 +6799,7 @@ var eF = Fa(Kt => {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             type: "button",
                             onClick: v
-                        }, "Cancel"))])])) : C("", !0)]
+                        }, "取消"))])])) : C("", !0)]
                     }),
                     _: 1
                 }, 8, ["关闭"]))
@@ -6839,7 +6839,7 @@ var eF = Fa(Kt => {
         r5 = {
             key: 1,
             class: "more_icon",
-            title: "View docker information"
+            title: "查看 Docker 信息"
         },
         s5 = {
             class: "DeviceBlock"
@@ -10024,7 +10024,7 @@ var eF = Fa(Kt => {
                         }) => [t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: _
-                        }, "Cancel", 8, _b)]),
+                        }, "取消", 8, _b)]),
                         _: 1
                     })])], 40, db)])) : a.value == 1 ? (i(), r("div", hb, [xb, t("div", kb, [D(b, {
                         to: "/",
@@ -10349,7 +10349,7 @@ var eF = Fa(Kt => {
                         }) => [t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: $
-                        }, "Cancel", 8, uv)]),
+                        }, "取消", 8, uv)]),
                         _: 1
                     })])], 40, Ib)])) : a.value == 1 ? (i(), r("div", lv, [cv, t("div", pv, [D(B, {
                         to: "/",
@@ -10565,7 +10565,7 @@ var eF = Fa(Kt => {
                         }) => [t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: A
-                        }, "Cancel", 8, kv)]),
+                        }, "取消", 8, kv)]),
                         _: 1
                     })])])) : a.value == 1 ? (i(), r("div", wv, [yv, Fv, t("form", {
                         onSubmit: nt(u, ["prevent"])
@@ -10631,7 +10631,7 @@ var eF = Fa(Kt => {
                         }) => [t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: A
-                        }, "Cancel", 8, Vv)]),
+                        }, "取消", 8, Vv)]),
                         _: 1
                     })])], 40, Ev)])) : a.value == 2 ? (i(), r("div", Gv, [jv, Rv, t("div", {
                         class: "btns"
@@ -10660,7 +10660,7 @@ var eF = Fa(Kt => {
                         }) => [t("button", {
                             class: "cbi-button cbi-button-remove app-btn app-back",
                             onClick: A
-                        }, "Cancel", 8, ag)]),
+                        }, "取消", 8, ag)]),
                         _: 1
                     })])])) : C("", !0)
                 }
@@ -12229,7 +12229,7 @@ var eF = Fa(Kt => {
                         class: "cbi-button cbi-button-remove",
                         onClick: p,
                         disabled: o.value
-                    }, "Cancel", 8, Rx), t("button", {
+                    }, "取消", 8, Rx), t("button", {
                         class: "cbi-button cbi-button-apply",
                         onClick: f,
                         disabled: o.value
@@ -12330,7 +12330,7 @@ var eF = Fa(Kt => {
                         class: "button cbi-button cbi-button-apply",
                         onClick: l,
                         disabled: o.value
-                    }, "Next", 8, ek))])])]),
+                    }, "下一步", 8, ek))])])]),
                     _: 1
                 }))
             }
