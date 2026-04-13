@@ -245,8 +245,10 @@ function M.disk_status()
         for name in blocks:gmatch("[^\n]+") do
             if name:match("^mmcblk%d+$") and not disk_map[name] then
                 local path = "/dev/" .. name
-                local size_bytes = tonumber(u.read_file("/sys/block/" .. name .. "/size") or "0") * 512
-                local model = (u.read_file("/sys/block/" .. name .. "/device/model") or name):gsub("%s+$", "")
+                local size_str = u.read_file("/sys/block/" .. name .. "/size") or "0"
+                local size_bytes = (tonumber(size_str:match("(%d+)")) or 0) * 512
+                local model_raw = u.read_file("/sys/block/" .. name .. "/device/model") or name
+                local model = model_raw:gsub("%s+$", "")
                 
                 local disk = {
                     name = name,

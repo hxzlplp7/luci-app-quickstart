@@ -589,7 +589,9 @@ function M.status()
     end
 
     -- Trigger background update if cache is empty or older than 10 mins
-    local last_update = (util.lsblk and util.lsblk.mtime) and util.lsblk.mtime(cache_file) or 0
+    local fs = require "nixio.fs"
+    local stat = fs.stat(cache_file)
+    local last_update = stat and stat.mtime or 0
     if public_ip == "" or (now - last_update > 600) then
         os.execute("curl -skL https://ipleak.net/json/ | jsonfilter -e 'ip=@.ip' -e 'country=@.country_name' -e 'isp=@.isp_name' > " .. cache_file .. " 2>/dev/null &")
     end
