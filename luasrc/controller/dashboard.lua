@@ -279,44 +279,8 @@ end
 local function api_domains()
     local list, source = {}, "none"
 
-    -- ── Strategy 1: /proc/net/nf_conntrack (no extra tools) ──────────
-    local ct = read_all("/proc/net/nf_conntrack") or ""
-    if ct ~= "" then
-        local counts = {}
-        for line in ct:gmatch("[^\n]+") do
-            if line:find("ESTABLISHED", 1, true) or line:find("TIME_WAIT", 1, true) then
-                local dst = line:match("dst=(%d+%.%d+%.%d+%.%d+)")
-                if dst then
-                    local is_private =
-                        dst:match("^10%.") or
-                        dst:match("^192%.168%.") or
-                        dst:match("^172%.1[6-9]%.") or
-                        dst:match("^172%.2%d%.") or
-                        dst:match("^172%.3[01]%.") or
-                        dst:match("^127%.") or
-                        dst:match("^169%.254%.") or
-                        dst:match("^0%.")
-                    if not is_private then
-                        counts[dst] = (counts[dst] or 0) + 1
-                    end
-                end
-            end
-        end
-        local entries = {}
-        for ip, cnt in pairs(counts) do
-            entries[#entries + 1] = { domain = ip, count = cnt }
-        end
-        table.sort(entries, function(a, b) return a.count > b.count end)
-        if #entries > 0 then
-            source = "conntrack"
-            for i = 1, math.min(20, #entries) do
-                list[#list + 1] = entries[i]
-            end
-        end
-    end
-
-    -- ── Strategy 2: nlbw CLI (only when conntrack gave nothing) ──────
-    if #list == 0 and path_exists("/usr/sbin/nlbw") then
+    -- ── Strategy 1: nlbw CLI (Preferred for hostnames) ──────
+    if path_exists("/usr/sbin/nlbw") then
         local raw = exec_trim("nlbw -c json -g host 2>/dev/null")
         if raw ~= "" then
             local ok, data = pcall(jsonc.parse, raw)
@@ -339,6 +303,44 @@ local function api_domains()
                     for i = 1, math.min(20, #entries) do
                         list[#list + 1] = entries[i]
                     end
+                end
+            end
+        end
+    end
+
+    -- ── Strategy 2: /proc/net/nf_conntrack (Fallback to raw IPs) ───
+    if #list == 0 then
+        local ct = read_all("/proc/net/nf_conntrack") or ""
+        if ct ~= "" then
+            local counts = {}
+            for line in ct:gmatch("[^\n]+") do
+                if line:find("ESTABLISHED", 1, true) or line:find("TIME_WAIT", 1, true) then
+                    local dst = line:match("dst=(%d+%.%d+%.%d+%.%d+)")
+                    if dst then
+                        local is_private =
+                            dst:match("^10%.") or
+                            dst:match("^192%.168%.") or
+                            dst:match("^172%.1[6-9]%.") or
+                            dst:match("^172%.2%d%.") or
+                            dst:match("^172%.3[01]%.") or
+                            dst:match("^127%.") or
+                            dst:match("^169%.254%.") or
+                            dst:match("^0%.")
+                        if not is_private then
+                            counts[dst] = (counts[dst] or 0) + 1
+                        end
+                    end
+                end
+            end
+            local entries = {}
+            for ip, cnt in pairs(counts) do
+                entries[#entries + 1] = { domain = ip, count = cnt }
+            end
+            table.sort(entries, function(a, b) return a.count > b.count end)
+            if #entries > 0 then
+                source = "conntrack"
+                for i = 1, math.min(20, #entries) do
+                    list[#list + 1] = entries[i]
                 end
             end
         end

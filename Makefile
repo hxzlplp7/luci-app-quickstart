@@ -19,9 +19,6 @@ LUCI_MINIFY_JS:=0
 
 include $(TOPDIR)/feeds/luci/luci.mk
 
-# call BuildPackage - OpenWrt buildroot signature
-
-# 临时修复 OpenWrt 21.02 SDK 中 luci.mk 生成的汉化包 postinst 脚本在 upgrade 时的报错
 define Package/luci-i18n-dashboard-zh-cn/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] || {

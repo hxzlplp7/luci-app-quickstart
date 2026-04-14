@@ -125,3 +125,36 @@ msgstr "个连接"
 
 msgid "No real data detected, showing mock data"
 msgstr "未检测到真实数据，当前为演示内容"
+
+msgid "Overview"
+msgstr "概览"
+
+msgid "Fetching..."
+msgstr "正在获取..."
+
+msgid "Fetch Failed"
+msgstr "获取失败"
+
+msgid "Please install nlbwmon and enable domain stats"
+msgstr "请安装 nlbwmon 并启用域名统计"
+
+msgid "times"
+msgstr "次"
+
+msgid "Units"
+msgstr "台"
+
+msgid "Change Password"
+msgstr "修改密码"
+
+msgid "System Settings"
+msgstr "系统设置"
+
+msgid "File Sharing"
+msgstr "文件共享"
+
+msgid "Online"
+msgstr "在线"
+
+msgid "Recent Active Domains"
+msgstr "近期活跃域名"
