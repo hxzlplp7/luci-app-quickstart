@@ -6,161 +6,38 @@ msgstr ""
 msgid "Dashboard"
 msgstr "仪表盘"
 
-msgid "Network Config"
-msgstr "网络配置"
+msgid "System status and traffic monitoring"
+msgstr "系统状态与流量实时监控"
 
-msgid "Network Interface"
-msgstr "网络接口"
+msgid "Incoming Speed"
+msgstr "下行网速"
+
+msgid "Outgoing Speed"
+msgstr "上行网速"
+
+msgid "Total Traffic"
+msgstr "流量总计"
+
+msgid "Total Download"
+msgstr "累计下载"
+
+msgid "Total Upload"
+msgstr "累计上传"
+
+msgid "Network IP"
+msgstr "网络 IP"
+
+msgid "Top Domains"
+msgstr "活跃域名排行"
+
+msgid "Traffic Breakdown"
+msgstr "流量类型统计"
 
 msgid "Online Users"
 msgstr "在线设备"
 
-msgid "Traffic Monitoring"
-msgstr "流量监控"
-
-msgid "Network Interfaces"
-msgstr "网络接口"
-
-msgid "Bandwidth Monitoring"
-msgstr "带宽监控"
-
-msgid "Network Port Configuration"
-msgstr "网络端口配置"
-
-msgid "Protocol (Network Acquisition Method)"
-msgstr "协议（网络获取方式）"
-
-msgid "DHCP Client"
-msgstr "DHCP 客户端"
-
-msgid "PPPoE"
-msgstr "PPPoE"
-
-msgid "Static Address"
-msgstr "静态地址"
-
-msgid "Dismiss"
-msgstr "取消"
-
-msgid "Save"
-msgstr "保存"
-
-msgid "Delete"
-msgstr "删除"
-
-msgid "Edit"
-msgstr "编辑"
-
-msgid "Save & Apply"
-msgstr "保存并应用"
-
-msgid "Intranet"
-msgstr "内网测速"
-
-msgid "DNS Server"
-msgstr "DNS 配置"
-
-msgid "Disk"
-msgstr "磁盘"
-
-msgid "File Manager"
-msgstr "文件管理"
-
-msgid "Quick Config"
-msgstr "快速配置"
-
-msgid "Mount Points"
-msgstr "挂载点"
-
-msgid "Disk Manager"
-msgstr "磁盘管理"
-
-msgid "Getting disk information..."
-msgstr "正在获取磁盘信息..."
-
-msgid "System Root Directory"
-msgstr "系统根目录"
-
-msgid "Mounted Disk"
-msgstr "已挂载磁盘"
-
-msgid "Disconnected"
-msgstr "未联网"
-
-msgid "Intranet Configuration"
-msgstr "内网测速"
-
-msgid "Only count mounted partitions"
-msgstr "仅统计已挂载分区"
-
-msgid "Not partitioned"
-msgstr "未分区"
-
-msgid "Unformatted"
-msgstr "未格式化"
-
-msgid "No mounted"
-msgstr "未挂载"
-
-msgid "System partition"
-msgstr "系统分区"
-
-msgid "Manual mount"
-msgstr "手动挂载"
-
-msgid "Partition and format"
-msgstr "分区并格式化"
-
-msgid "Format Partition"
-msgstr "格式化分区"
-
-msgid "Manual Mount"
-msgstr "手动挂载"
-
-msgid "Partition Information"
-msgstr "分区信息"
-
-msgid "Exit"
-msgstr "退出"
-
-msgid "Up"
-msgstr "上传"
-
-msgid "Down"
-msgstr "下载"
-
-msgid "Read only"
-msgstr "只读"
-
-msgid "Read and write"
-msgstr "可读写"
+msgid "Uptime"
+msgstr "运行时间"
 
 msgid "Firmware"
 msgstr "固件"
-
-msgid "View network interface information"
-msgstr "查看网络接口信息"
-
-msgid "Hard Disk Configuration"
-msgstr "硬盘配置"
-
-msgid "Mount Disk Configuration"
-msgstr "挂载磁盘配置"
-
-msgid "Full disk format"
-msgstr "整盘格式化"
-
-msgid "Partition information"
-msgstr "分区信息"
-
-msgid "S.M.A.R.T Exception"
-msgstr "S.M.A.R.T 异常"
-
-msgid "Current status:"
-msgstr "当前状态："
-
-msgid "Address"
-msgstr "地址"
-
-msgid "Directory"
-msgstr "目录"

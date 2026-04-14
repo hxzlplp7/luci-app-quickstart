@@ -1,274 +1,87 @@
 <%+header%>
-<%
-  local jsonc = require "luci.jsonc"
-  local i18n = require "luci.i18n"
-  local fs = require "nixio.fs"
-  if i18n.loadc then
-      pcall(i18n.loadc, "dashboard")
-  elseif i18n.load then
-      pcall(i18n.load, "dashboard")
-  end
-  local features = { "_lua_force_array_" }
-  local configs = {}
-  local function has_any_file(paths)
-    for _, path in ipairs(paths or {}) do
-      if fs.stat(path) then
-        return true
-      end
-    end
-    return false
-  end
-  local function has_menu_path(path)
-    if not path or path == "" or not fs.stat("/usr/share/luci/menu.d") then
-      return false
-    end
-    return luci.sys.call(string.format("grep -qsrF %q /usr/share/luci/menu.d 2>/dev/null", path)) == 0
-  end
-  local i18n_map = {
-    ["Network Config"] = i18n.translate("Network Config"),
-    ["Network Interface"] = i18n.translate("Network Interface"),
-    ["Online Users"] = i18n.translate("Online Users"),
-    ["Traffic Monitoring"] = i18n.translate("Traffic Monitoring"),
-    ["Network Interfaces"] = i18n.translate("Network Interfaces"),
-    ["Bandwidth Monitoring"] = i18n.translate("Bandwidth Monitoring"),
-    ["Network Port Configuration"] = i18n.translate("Network Port Configuration"),
-    ["Protocol (Network Acquisition Method)"] = i18n.translate("Protocol (Network Acquisition Method)"),
-    ["DHCP Client"] = i18n.translate("DHCP Client"),
-    ["PPPoE"] = i18n.translate("PPPoE"),
-    ["Static Address"] = i18n.translate("Static Address"),
-    ["Dismiss"] = i18n.translate("Dismiss"),
-    ["Save"] = i18n.translate("Save"),
-    ["Delete"] = i18n.translate("Delete"),
-    ["Edit"] = i18n.translate("Edit"),
-    ["Save & Apply"] = i18n.translate("Save & Apply"),
-    ["Intranet"] = i18n.translate("Intranet"),
-    ["Disk"] = i18n.translate("Disk"),
-    ["File Manager"] = i18n.translate("File Manager"),
-    ["Quick Config"] = i18n.translate("Quick Config"),
-    ["Mount Points"] = i18n.translate("Mount Points"),
-    ["Disk Manager"] = i18n.translate("Disk Manager"),
-    ["Getting disk information..."] = i18n.translate("Getting disk information..."),
-    ["System Root Directory"] = i18n.translate("System Root Directory"),
-    ["Mounted Disk"] = i18n.translate("Mounted Disk"),
-    ["Disconnected"] = i18n.translate("Disconnected"),
-    ["Intranet Configuration"] = i18n.translate("Intranet Configuration"),
-    ["DNS Server"] = i18n.translate("DNS Server"),
-    ["Only count mounted partitions"] = i18n.translate("Only count mounted partitions"),
-    ["Not partitioned"] = i18n.translate("Not partitioned"),
-    ["Unformatted"] = i18n.translate("Unformatted"),
-    ["No mounted"] = i18n.translate("No mounted"),
-    ["System partition"] = i18n.translate("System partition"),
-    ["Manual mount"] = i18n.translate("Manual mount"),
-    ["Partition and format"] = i18n.translate("Partition and format"),
-    ["Format Partition"] = i18n.translate("Format Partition"),
-    ["Manual Mount"] = i18n.translate("Manual Mount"),
-    ["Partition Information"] = i18n.translate("Partition Information"),
-    ["Exit"] = i18n.translate("Exit"),
-    ["Up"] = i18n.translate("Up"),
-    ["Down"] = i18n.translate("Down"),
-    ["只读"] = i18n.translate("只读"),
-    ["读写"] = i18n.translate("读写"),
-    ["Firmware"] = i18n.translate("Firmware"),
-    ["View network interface information"] = i18n.translate("View network interface information"),
-    ["Hard Disk Configuration"] = i18n.translate("Hard Disk Configuration"),
-    ["Mount Disk Configuration"] = i18n.translate("Mount Disk Configuration"),
-    ["Full disk format"] = i18n.translate("Full disk format"),
-    ["Partition information"] = i18n.translate("Partition information"),
-    ["S.M.A.R.T Exception"] = i18n.translate("S.M.A.R.T Exception"),
-    ["Current status:"] = i18n.translate("Current status:"),
-    ["Address"] = i18n.translate("Address"),
-    ["Directory"] = i18n.translate("Directory")
-  }
-  local features_json
-  local configs_json
-  local i18n_json
-  local token_json
-  local prefix_json
-  local js_version = ""
-  local css_version = ""
-  local js_stat = fs.stat("/www/luci-static/dashboard/index.js")
-  local css_stat = fs.stat("/www/luci-static/dashboard/style.css")
-  if luci.sys.call("[ -e /etc/init.d/dockerd ] >/dev/null 2>&1") == 0 then
-      features[#features+1] = "dockerd"
-  end
-  if has_menu_path("admin/docker/overview") or has_any_file({
-      "/usr/share/luci/menu.d/luci-app-dockerman.json",
-      "/usr/lib/lua/luci/controller/dockerman.lua",
-      "/usr/lib/lua/luci/controller/docker.lua",
-      "/usr/lib/lua/luci/controller/admin/docker.lua"
-  }) then
-      features[#features+1] = "docker_overview"
-  end
-  if has_menu_path("admin/system/diskman") or has_any_file({
-      "/usr/share/luci/menu.d/luci-app-diskman.json",
-      "/usr/lib/lua/luci/controller/diskman.lua",
-      "/usr/lib/lua/luci/model/cbi/admin_system/diskman.lua",
-      "/usr/lib/lua/luci/model/cbi/diskman/disks.lua"
-  }) then
-      features[#features+1] = "diskman"
-  end
-  if has_menu_path("admin/system/mounts") or has_any_file({
-      "/usr/lib/lua/luci/model/cbi/admin_system/mounts.lua",
-      "/usr/lib/lua/luci/view/admin_system/mounts.htm"
-  }) then
-      features[#features+1] = "system_mounts"
-  end
-  if luci.sys.call("/etc/init.d/ttyd running >/dev/null 2>&1") == 0 then
-      features[#features+1] = "ttyd"
-      local uci  = require "luci.model.uci".cursor()
-      local port = uci:get_first("ttyd", "ttyd", "port") or "7681"
-      local ssl  = uci:get_first("ttyd", "ttyd", "ssl") or "0"
-      configs["ttyd"] = {
-        port = tonumber(port),
-        ssl = ssl == "1"
-      }
-  end
-  features_json = jsonc.stringify(features)
-  configs_json = jsonc.stringify(configs)
-  i18n_json = jsonc.stringify(i18n_map)
-  token_json = jsonc.stringify(token or "")
-  prefix_json = jsonc.stringify(prefix or "")
-  if js_stat and js_stat.mtime then
-      js_version = "?v=" .. tostring(js_stat.mtime)
-  end
-  if css_stat and css_stat.mtime then
-      css_version = "?v=" .. tostring(css_stat.mtime)
-  end
--%>
-<div id="app"></div>
-<script>
-    (function(){
-      window.token = <%=token_json%>;
-      var vue_prefix = <%=prefix_json%>;
-      if (!vue_prefix || vue_prefix === '') vue_prefix = '/cgi-bin/luci/admin/dashboard';
-      if (vue_prefix.charAt(0) !== '/') vue_prefix = '/' + vue_prefix;
-      if (vue_prefix.slice(-1) === '/') vue_prefix = vue_prefix.slice(0, -1);
+<link rel="stylesheet" href="/luci-static/dashboard/dashboard.css">
 
-      window.vue_base = vue_prefix + '/';
-      window.dashboard_features = <%=features_json%>;
-      window.dashboard_configs = <%=configs_json%>;
-      window.dashboard_i18n = <%=i18n_json%>;
+<div class="dashboard">
+    <header>
+        <div class="brand">
+            <h1><%=_("Dashboard")%></h1>
+            <div class="sys-info">
+                <%=_("System status and traffic monitoring")%>
+            </div>
+        </div>
+        <div class="sys-info" style="text-align: right">
+            <span id="cpu-label">CPU: <b id="cpu-val">--</b></span> | 
+            <span id="mem-label">RAM: <b id="mem-val">--</b></span>
+        </div>
+    </header>
 
-      if (location.pathname === vue_prefix + '/network' || location.pathname.indexOf(vue_prefix + '/network/') === 0) {
-        location.replace(vue_prefix + '/interfaceconfig');
-        return;
-      }
+    <!-- 圆形仪表盘区域 -->
+    <div class="gauge-container">
+        <!-- 下载速度表盘 -->
+        <div class="gauge-item" id="gauge-down">
+            <svg class="gauge-svg" width="240" height="240" viewBox="0 0 240 240">
+                <circle class="gauge-bg" cx="120" cy="120" r="100"></circle>
+                <circle class="gauge-fill" cx="120" cy="120" r="100" stroke="var(--accent-blue)"></circle>
+            </svg>
+            <div class="gauge-content">
+                <span class="gauge-label"><%=_("Incoming Speed")%></span>
+                <div class="gauge-value" id="val-down">0.0</div>
+                <span class="gauge-unit">Mbps</span>
+            </div>
+        </div>
 
-      var currentPath = location.pathname;
-      var normalizedPath = currentPath;
-      if (normalizedPath.slice(-1) === '/' && normalizedPath.length > 1) normalizedPath = normalizedPath.slice(0, -1);
+        <!-- 上传速度表盘 -->
+        <div class="gauge-item" id="gauge-up">
+            <svg class="gauge-svg" width="240" height="240" viewBox="0 0 240 240">
+                <circle class="gauge-bg" cx="120" cy="120" r="100"></circle>
+                <circle class="gauge-fill" cx="120" cy="120" r="100" stroke="var(--accent-green)"></circle>
+            </svg>
+            <div class="gauge-content">
+                <span class="gauge-label"><%=_("Outgoing Speed")%></span>
+                <div class="gauge-value" id="val-up">0.0</div>
+                <span class="gauge-unit">Mbps</span>
+            </div>
+        </div>
+    </div>
 
-      // Detect and fix double-path corruption (e.g., .../dashboard/cgi-bin/luci/)
-      if (currentPath.indexOf(vue_prefix + '/cgi-bin/luci') !== -1) {
-        location.replace(vue_prefix + '/');
-        return;
-      }
+    <!-- 详细统计网格 -->
+    <div class="stats-grid">
+        <!-- 流量统计卡片 -->
+        <div class="stats-card">
+            <div class="card-title"><%=_("Total Traffic")%></div>
+            <div class="stat-list">
+                <div class="stat-row">
+                    <span class="stat-name"><%=_("Total Download")%></span>
+                    <span class="stat-val" id="total-rx">0 B</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-name"><%=_("Total Upload")%></span>
+                    <span class="stat-val" id="total-tx">0 B</span>
+                </div>
+                <div class="stat-row" style="margin-top: 10px; border:none">
+                    <span class="stat-name" style="color:var(--text-muted)"><%=_("Network IP")%></span>
+                    <span class="stat-val" id="wan-ip-display">--</span>
+                </div>
+            </div>
+        </div>
 
-      if (normalizedPath !== vue_prefix && !location.pathname.startsWith(window.vue_base)) {
-        if (window.history && window.history.replaceState) {
-          window.history.replaceState({}, null, vue_prefix + '/');
-        } else {
-          location.href = vue_prefix + '/';
-        }
-      }
+        <!-- 活跃域名排行 -->
+        <div class="stats-card">
+            <div class="card-title"><%=_("Top Domains")%></div>
+            <div id="domain-list" class="stat-list">
+                <!-- 动态加载 -->
+            </div>
+        </div>
 
-      var prefixRules = [
-        ['磁盘状态：', '磁盘状态：'],
-        ['磁盘格式：', '磁盘格式：'],
-        ['分区信息 - ', '分区信息 - '],
-        ['IP Address（', 'IP 地址（']
-      ];
+        <!-- 流量类型分布 -->
+        <div class="stats-card">
+            <div class="card-title"><%=_("Traffic Breakdown")%></div>
+            <div id="type-list" class="stat-list">
+                <!-- 动态加载 -->
+            </div>
+        </div>
+    </div>
+</div>
 
-      function translateValue(value) {
-        if (!value) {
-          return value;
-        }
-
-        var normalized = value.replace(/\s+/g, ' ').trim();
-        if (!normalized) {
-          return value;
-        }
-
-        if (window.dashboard_i18n[normalized]) {
-          return value.replace(normalized, window.dashboard_i18n[normalized]);
-        }
-
-        for (var i = 0; i < prefixRules.length; i++) {
-          if (normalized.indexOf(prefixRules[i][0]) === 0) {
-            return value.replace(prefixRules[i][0], prefixRules[i][1]);
-          }
-        }
-
-        return value;
-      }
-
-      function walkAndTranslate(root) {
-        if (!root || !document.body) {
-          return;
-        }
-
-        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-        var current;
-        while ((current = walker.nextNode())) {
-          var parentTag = current.parentNode && current.parentNode.tagName;
-          if (parentTag === 'SCRIPT' || parentTag === 'STYLE' || parentTag === 'NOSCRIPT') {
-            continue;
-          }
-          if (current.nodeValue && current.nodeValue.trim()) {
-            current.nodeValue = translateValue(current.nodeValue);
-          }
-        }
-
-        var elements = root.querySelectorAll ? root.querySelectorAll('[title],[placeholder],input[type="button"],button') : [];
-        for (var i = 0; i < elements.length; i++) {
-          var element = elements[i];
-          if (element.title) {
-            element.title = translateValue(element.title);
-          }
-          if (element.placeholder) {
-            element.placeholder = translateValue(element.placeholder);
-          }
-          if (element.tagName === 'INPUT' && element.type === 'button' && element.value) {
-            element.value = translateValue(element.value);
-          }
-        }
-      }
-
-      function installTranslator() {
-        walkAndTranslate(document.body);
-        var observer = new MutationObserver(function(mutations) {
-          for (var i = 0; i < mutations.length; i++) {
-            var mutation = mutations[i];
-            if (mutation.type === 'characterData' && mutation.target) {
-              mutation.target.nodeValue = translateValue(mutation.target.nodeValue);
-            }
-            for (var j = 0; j < mutation.addedNodes.length; j++) {
-              var node = mutation.addedNodes[j];
-              if (node.nodeType === 3 && node.nodeValue) {
-                var parentTag = node.parentNode && node.parentNode.tagName;
-                if (parentTag !== 'SCRIPT' && parentTag !== 'STYLE' && parentTag !== 'NOSCRIPT') {
-                  node.nodeValue = translateValue(node.nodeValue);
-                }
-              } else if (node.nodeType === 1) {
-                walkAndTranslate(node);
-              }
-            }
-          }
-        });
-        observer.observe(document.body, {
-          childList: true,
-          subtree: true,
-          characterData: true
-        });
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', installTranslator, { once: true });
-      } else {
-        installTranslator();
-      }
-    })();
-</script>
-<script type="module" crossorigin src="/luci-static/dashboard/index.js<%=js_version%>"></script>
-<link rel="stylesheet" href="/luci-static/dashboard/style.css<%=css_version%>">
+<script src="/luci-static/dashboard/dashboard.js"></script>
 <%+footer%>
