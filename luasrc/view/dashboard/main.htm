@@ -2,6 +2,7 @@
 <!-- 本地资源引用 -->
 <script src="/luci-static/dashboard/tailwindcss.js"></script>
 <script src="/luci-static/dashboard/lucide.js"></script>
+<script src="/luci-static/dashboard/echarts.js"></script>
 
 <div class="bg-[#f4f6f8] font-sans text-gray-800 min-h-screen">
 
@@ -100,29 +101,29 @@
 
             <!-- 右侧栏 -->
             <div class="lg:col-span-8 space-y-6">
-                <!-- 流量数据看板 -->
-                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col justify-center">
-                        <div class="flex items-center justify-between mb-3"><span class="text-sm text-gray-500"><%=_("Downlink Speed")%></span><i data-lucide="arrow-down-circle" class="w-[28px] h-[28px] text-blue-500"></i></div>
-                        <div class="text-2xl font-semibold text-gray-800" id="speed-down">0 B/s</div>
+                <!-- ECharts 实时流量仪表盘 -->
+                <div class="bg-[#1e293b] rounded-xl shadow-lg border border-gray-700 p-5 relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-b from-[#253248] to-[#1e293b] opacity-50"></div>
+                    <div class="relative z-10 flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="activity" class="text-blue-400 w-5 h-5"></i>
+                            <h2 class="font-medium text-gray-200 text-lg"><%=_("Real-time Traffic")%></h2>
+                        </div>
+                        <div class="text-sm text-gray-400 flex space-x-6 bg-[#0f172a] px-4 py-2 rounded-lg border border-gray-800">
+                            <div><%=_("Total Download")%>: <span id="total-down" class="text-blue-400 font-mono font-medium">0 B</span></div>
+                            <div><%=_("Total Upload")%>: <span id="total-up" class="text-emerald-400 font-mono font-medium">0 B</span></div>
+                        </div>
                     </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col justify-center">
-                        <div class="flex items-center justify-between mb-3"><span class="text-sm text-gray-500"><%=_("Uplink Speed")%></span><i data-lucide="arrow-up-circle" class="w-[28px] h-[28px] text-emerald-500"></i></div>
-                        <div class="text-2xl font-semibold text-gray-800" id="speed-up">0 B/s</div>
-                    </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col justify-center">
-                        <div class="flex items-center justify-between mb-3"><span class="text-sm text-gray-500"><%=_("Total Download")%></span><i data-lucide="activity" class="w-[28px] h-[28px] text-indigo-500"></i></div>
-                        <div class="text-2xl font-semibold text-gray-800" id="total-down">0 B</div>
-                    </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col justify-center">
-                        <div class="flex items-center justify-between mb-3"><span class="text-sm text-gray-500"><%=_("Total Upload")%></span><i data-lucide="activity" class="w-[28px] h-[28px] text-orange-500"></i></div>
-                        <div class="text-2xl font-semibold text-gray-800" id="total-up">0 B</div>
+                    
+                    <div class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-4 h-[240px]">
+                        <div id="gauge-down" class="w-full h-full"></div>
+                        <div id="gauge-up" class="w-full h-full"></div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
                     <!-- 联网设备卡片 -->
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[400px]">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[380px]">
                         <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
                             <div class="flex items-center space-x-2">
                                 <i data-lucide="users" class="w-[18px] h-[18px] text-blue-500"></i>
@@ -136,7 +137,7 @@
                     </div>
 
                     <!-- 活跃域名卡片 -->
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[400px]">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[380px]">
                         <div class="px-5 py-4 border-b border-gray-50 flex items-center space-x-2">
                             <i data-lucide="link" class="w-[18px] h-[18px] text-indigo-500"></i>
                             <h2 class="font-medium text-gray-700"><%=_("Recent Active Domains")%></h2>
@@ -156,7 +157,9 @@
     // 定义多语言常量供 JS 使用
     const i18n = {
         nlbw_hint: '<%=_("Please install nlbwmon and enable domain stats")%>',
-        times: '<%=_("times")%>'
+        times: '<%=_("times")%>',
+        down_rate: '<%=_("Downlink Rate")%>',
+        up_rate: '<%=_("Uplink Rate")%>'
     };
 
     // 渲染页面图标
@@ -170,11 +173,11 @@
     let mockRx = 1024 * 1024 * 300;
     const getMockData = (endpoint) => {
         switch(endpoint) {
-            case 'netinfo': return { wanStatus: 'up', wanIp: '100.64.12.34', lanIp: '192.168.100.1', networkUptime: '5d 12h 45m' };
-            case 'sysinfo': return { model: 'X86 Router (Intel N5105)', sysUptime: '12d 3h 10m', cpuUsage: Math.floor(Math.random() * 20) + 10, memUsage: 42 };
+            case 'netinfo': return { wanStatus: 'up', wanIp: '100.64.12.34', lanIp: '192.168.100.1', networkUptime: '5d 12h 45m 32s' };
+            case 'sysinfo': return { model: 'X86 Router (Intel N5105)', sysUptime: '12d 3h 10m 05s', cpuUsage: Math.floor(Math.random() * 20) + 10, memUsage: 42 };
             case 'traffic': 
-                mockTx += Math.floor(Math.random() * 500000); 
-                mockRx += Math.floor(Math.random() * 2000000); 
+                mockTx += Math.floor(Math.random() * 2000000); 
+                mockRx += Math.floor(Math.random() * 15000000); 
                 return { tx_bytes: mockTx, rx_bytes: mockRx };
             case 'devices': return [
                 { mac: 'AA:BB:CC:DD:EE:FF', ip: '192.168.100.101', name: 'iPhone-13', type: 'mobile', active: true },
@@ -281,7 +284,12 @@
     async function loadDomains() {
         const domains = await apiRequest('domains');
         if (!domains || domains.length === 0) {
-            document.getElementById('domains-list').innerHTML = `<div class="h-full flex items-center justify-center text-sm text-gray-400">${i18n.nlbw_hint}</div>`;
+            document.getElementById('domains-list').innerHTML = `
+                <div class="h-full flex flex-col items-center justify-center text-sm text-gray-400 space-y-2">
+                    <i data-lucide="package-open" class="w-10 h-10 text-gray-300"></i>
+                    <span>${i18n.nlbw_hint}</span>
+                </div>`;
+            lucide.createIcons();
             return;
         }
         const maxCount = domains[0].count;
@@ -309,6 +317,62 @@
         });
     }
 
+    // ================= ECharts 仪表盘配置 =================
+    const chartDown = echarts.init(document.getElementById('gauge-down'));
+    const chartUp = echarts.init(document.getElementById('gauge-up'));
+
+    // 生成仪表盘通用配置
+    function getGaugeOption(title, gradientColors, maxVal) {
+        return {
+            series: [{
+                type: 'gauge',
+                startAngle: 210,
+                endAngle: -30,
+                min: 0,
+                max: maxVal,
+                splitNumber: 4,
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 1, 0, gradientColors)
+                },
+                progress: { show: true, width: 16 },
+                pointer: { show: false }, // 隐藏指针，只保留渐变环
+                axisLine: { lineStyle: { width: 16, color: [[1, '#334155']] } },
+                axisTick: { show: false },
+                splitLine: { show: false },
+                axisLabel: { show: false },
+                title: { show: true, offsetCenter: [0, '35%'], color: '#94a3b8', fontSize: 13 },
+                detail: {
+                    valueAnimation: true,
+                    formatter: function (value) {
+                        return formatBytes(value) + '/s';
+                    },
+                    color: '#f8fafc',
+                    fontSize: 22,
+                    fontWeight: 'bold',
+                    offsetCenter: [0, '-5%']
+                },
+                data: [{ value: 0, name: title }]
+            }]
+        };
+    }
+
+    // 初始化加载空状态图表
+    const downColors = [{offset:0, color:'#3b82f6'}, {offset:1, color:'#8b5cf6'}]; // 蓝紫色
+    const upColors = [{offset:0, color:'#10b981'}, {offset:1, color:'#3b82f6'}]; // 绿蓝色
+    chartDown.setOption(getGaugeOption(i18n.down_rate, downColors, 10 * 1024 * 1024));
+    chartUp.setOption(getGaugeOption(i18n.up_rate, upColors, 10 * 1024 * 1024));
+
+    window.addEventListener('resize', () => { chartDown.resize(); chartUp.resize(); });
+
+    // 动态计算量程 (保证进度条刻度看起来自然)
+    function getDynamicMax(bytesPerSec) {
+        const MB = 1024 * 1024;
+        if (bytesPerSec <= 5 * MB) return 5 * MB;
+        if (bytesPerSec <= 20 * MB) return 20 * MB;
+        if (bytesPerSec <= 100 * MB) return 100 * MB;
+        return 1000 * MB;
+    }
+
     // 实时网速计算循环
     let prevTx = 0, prevRx = 0, prevTime = 0;
     async function refreshTraffic() {
@@ -323,10 +387,13 @@
                 if (timeDiff > 0) {
                     const upSpeed = Math.max(0, (traffic.tx_bytes - prevTx) / timeDiff);
                     const downSpeed = Math.max(0, (traffic.rx_bytes - prevRx) / timeDiff);
-                    document.getElementById('speed-up').innerText = formatBytes(upSpeed) + '/s';
-                    document.getElementById('speed-down').innerText = formatBytes(downSpeed) + '/s';
+                    
+                    // 更新 ECharts 表盘
+                    chartDown.setOption({ series: [{ max: getDynamicMax(downSpeed), data: [{ value: downSpeed, name: i18n.down_rate }] }] });
+                    chartUp.setOption({ series: [{ max: getDynamicMax(upSpeed), data: [{ value: upSpeed, name: i18n.up_rate }] }] });
                 }
             }
+            // 更新总流量文本
             document.getElementById('total-up').innerText = formatBytes(traffic.tx_bytes);
             document.getElementById('total-down').innerText = formatBytes(traffic.rx_bytes);
             
@@ -341,7 +408,7 @@
     loadDevices();
     loadDomains();
     refreshTraffic();
-    setInterval(refreshTraffic, 2000);
+    setInterval(refreshTraffic, 2000); // 每2秒刷新一次网速和负载
     
 </script>
 <%+footer%>

@@ -67,7 +67,16 @@ msgid "Recent Active Domains"
 msgstr "近期活跃域名"
 
 msgid "Please install nlbwmon and enable domain stats"
-msgstr "请安装 nlbwmon 插件并开启域名统计"
+msgstr "暂无数据，请确保已安装并开启 nlbwmon 插件"
 
 msgid "times"
 msgstr "次"
+
+msgid "Real-time Traffic"
+msgstr "实时流量"
+
+msgid "Downlink Rate"
+msgstr "下行速率"
+
+msgid "Uplink Rate"
+msgstr "上行速率"
