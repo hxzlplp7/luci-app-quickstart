@@ -4,19 +4,9 @@
 <script src="/luci-static/dashboard/lucide.js"></script>
 <script src="/luci-static/dashboard/echarts.js"></script>
 
-<div class="bg-[#f4f6f8] font-sans text-gray-800 min-h-screen">
-
-    <!-- 顶栏 (精简模式) -->
-    <div class="flex items-center justify-between px-6 py-3 bg-white shadow-sm mb-6 rounded-xl border border-gray-100">
-        <div class="flex items-center space-x-2">
-            <div class="text-xl font-bold tracking-wider text-blue-600">
-                Dashboard <span class="text-gray-400 font-normal text-sm ml-2">Overview</span>
-            </div>
-        </div>
-    </div>
-
+<div class="bg-[#f4f6f8] font-sans text-gray-800 p-4 min-h-[calc(100vh-120px)] rounded-xl">
     <!-- 主体内容区 -->
-    <main class="max-w-[1400px] mx-auto p-6 mt-2 flex flex-col gap-6">
+    <main class="max-w-[1400px] mx-auto flex flex-col gap-6">
 
         <!-- 第一排：网络接口状态 (左4) + 实时流量 (右8) -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch flex-none">
@@ -464,5 +454,5 @@
         setInterval(loadDomains, 5000);
         
     </script>
-</body>
-</html>
+</div>
+<%+footer%>
