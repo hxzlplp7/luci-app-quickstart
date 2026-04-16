@@ -1,83 +1,83 @@
-# Dashboard FWX Integration Design
+# Dashboard 与 FWX 功能集成设计
 
-## Summary
+## 概述
 
-This design defines the first-stage integration of the selected `fanchmwrt-packages` capabilities into `luci-app-dashboard`.
+本文档定义了将 `fanchmwrt-packages` 中已确认范围的能力，第一阶段集成到 `luci-app-dashboard` 的设计方案。
 
-The target is not a direct code transplant. The target is a single-page LuCI dashboard shell backed by a modular internal architecture that works on standard OpenWrt without requiring `fwxd` or `kmod-fwx`.
+目标不是直接把原仓库代码原样搬进来，而是在 `luci-app-dashboard` 内构建一个“单页 LuCI Dashboard 外壳 + 模块化内核”的实现，并且要求它在标准 OpenWrt 环境下可运行，不依赖 `fwxd` 或 `kmod-fwx`。
 
-Stage 1 covers these functional areas:
+第一阶段覆盖以下功能域：
 
-- Dashboard
-- Dashboard setting
-- User management and user detail views
-- Network settings
-- System settings
-- Internet record settings
-- Feature library
+- Dashboard 总览
+- Dashboard 设置
+- 用户管理与用户详情
+- 网络设置
+- 系统设置
+- 上网记录设置
+- 特征库
 
-Stage 1 does not include:
+第一阶段不包含以下内容：
 
-- App filter
-- MAC filter
-- Any feature that requires deep `fwx` kernel-assisted app classification semantics for correctness
+- 应用过滤
+- MAC 过滤
+- 任何必须依赖 `fwx` 内核级应用识别语义才能正确成立的深度功能
 
-## Goals
+## 目标
 
-- Keep `/admin/dashboard` as the single entry page.
-- Preserve a dashboard-first interaction model instead of restoring the original multi-page `fwx` navigation tree.
-- Replace `fwx` backend dependencies with standard OpenWrt-compatible data sources and configuration storage.
-- Refactor the current dashboard into a modular backend and frontend instead of continuing to expand the existing controller and template files.
-- Support graceful degradation when optional runtime capabilities such as `nlbwmon`, DNS logs, or a feature package are missing.
+- 保留 `/admin/dashboard` 作为唯一入口页面。
+- 保持“仪表盘优先”的交互形态，而不是恢复成原 `fwx` 的多页面菜单结构。
+- 用标准 OpenWrt 可用的数据源和配置存储替代 `fwx` 后端依赖。
+- 将当前 dashboard 重构为模块化前后端，而不是继续扩张现有控制器和模板。
+- 在 `nlbwmon`、DNS 日志、特征包等可选能力缺失时，提供明确的降级行为。
 
-## Non-Goals
+## 非目标
 
-- Full behavioral equivalence with `fwxd`-powered installations.
-- Integration of `luci-app-fwx-appfilter`.
-- Integration of `luci-app-fwx-macfilter`.
-- A full SPA rewrite with a new frontend toolchain.
-- Recreating `fwx`-specific deep application recognition accuracy on ordinary OpenWrt.
+- 不追求与 `fwxd` 环境下的行为完全等价。
+- 不集成 `luci-app-fwx-appfilter`。
+- 不集成 `luci-app-fwx-macfilter`。
+- 不引入新的完整 SPA 前端构建体系。
+- 不承诺在普通 OpenWrt 上复现 `fwx` 级别的应用识别精度。
 
-## Scope Decisions Confirmed
+## 已确认的范围决策
 
-The user confirmed the following product and implementation decisions:
+用户已经确认以下产品与实现方向：
 
-- Implementation target: real integration into `luci-app-dashboard`, not a menu wrapper.
-- Stage 1 scope: `dashboard + dashboard-setting + user + network + system + record + feature`.
-- UI direction: single-page shell.
-- Runtime target: standard OpenWrt compatibility first, not `fwx`-only.
-- Information density: overview-first, with lower-frequency content folded or lazy-loaded.
-- Mutability: some high-frequency configuration is writable from the single page, but not every possible setting.
-- Integration approach: single-page shell with a modular kernel.
+- 目标是“真实集成到 `luci-app-dashboard`”，不是菜单包装。
+- 第一阶段范围是 `dashboard + dashboard-setting + user + network + system + record + feature`。
+- UI 方向是单页外壳。
+- 运行目标优先兼容标准 OpenWrt，而不是仅支持 `fwx` 环境。
+- 信息密度采用“总览优先，低频内容折叠或延迟加载”。
+- 首页允许直接修改部分高频配置，但不把所有配置都堆进首页。
+- 集成方式采用“单页外壳 + 模块化内核”。
 
-## Architecture
+## 总体架构
 
-The implementation is split into four layers.
+实现拆分为四层。
 
-### 1. Controller Layer
+### 1. 控制器层
 
-File:
+文件：
 
 - `luasrc/controller/dashboard.lua`
 
-Responsibilities:
+职责：
 
-- Register the `/admin/dashboard` entry.
-- Validate session/auth for API access.
-- Dispatch API requests to feature-specific modules.
-- Stop owning business logic directly.
+- 注册 `/admin/dashboard` 页面入口。
+- 对 API 请求做会话校验与鉴权。
+- 将 API 请求分发到各功能模块。
+- 不再直接承载业务逻辑。
 
-The current controller already contains mixed responsibilities:
+当前控制器已经混合了以下职责：
 
-- page rendering
-- local API handlers
-- future route loading for `luci.dashboard.*`
+- 页面渲染
+- 本地 API 处理
+- 面向 `luci.dashboard.*` 的未来路由加载
 
-Stage 1 restructures this so that the controller becomes a thin router and auth boundary.
+第一阶段会将其重构为“薄控制器”，只负责路由和鉴权边界。
 
-### 2. API Layer
+### 2. API 层
 
-Planned module namespace:
+计划中的模块命名空间：
 
 - `luasrc/dashboard/api/overview.lua`
 - `luasrc/dashboard/api/users.lua`
@@ -87,16 +87,16 @@ Planned module namespace:
 - `luasrc/dashboard/api/feature.lua`
 - `luasrc/dashboard/api/settings.lua`
 
-Responsibilities:
+职责：
 
-- Parse request arguments.
-- Validate user input.
-- Call service-layer functions.
-- Return JSON using a unified response schema.
+- 解析请求参数。
+- 校验用户输入。
+- 调用 service 层。
+- 按统一 JSON 格式返回响应。
 
-### 3. Service Layer
+### 3. Service 层
 
-Planned module namespace:
+计划中的模块命名空间：
 
 - `luasrc/dashboard/services/overview.lua`
 - `luasrc/dashboard/services/users.lua`
@@ -106,21 +106,21 @@ Planned module namespace:
 - `luasrc/dashboard/services/feature.lua`
 - `luasrc/dashboard/services/settings.lua`
 
-Responsibilities:
+职责：
 
-- Express dashboard business semantics.
-- Merge and normalize data from multiple sources.
-- Enforce feature-level rules and capability-based fallbacks.
+- 表达 dashboard 级的业务语义。
+- 从多个数据源聚合与归一化数据。
+- 基于能力探测结果决定功能可用性和降级策略。
 
-Examples:
+示例：
 
-- Merge DHCP leases, ARP data, stored nicknames, and optional traffic stats into a user list.
-- Translate UCI and `ubus` network state into dashboard network forms and summaries.
-- Build the overview payload used by the single-page shell.
+- 将 DHCP lease、ARP、备注配置以及可选的流量数据合并成用户列表。
+- 把 `ubus` 和 UCI 的网络状态整理成 dashboard 可读写的网络配置视图。
+- 组装首页总览接口的聚合数据。
 
-### 4. Source / Adapter Layer
+### 4. Source / Adapter 层
 
-Planned module namespace:
+计划中的模块命名空间：
 
 - `luasrc/dashboard/sources/system.lua`
 - `luasrc/dashboard/sources/network.lua`
@@ -131,15 +131,15 @@ Planned module namespace:
 - `luasrc/dashboard/sources/feature.lua`
 - `luasrc/dashboard/sources/config.lua`
 
-Responsibilities:
+职责：
 
-- Read system state from OpenWrt-native sources.
-- Read and write dashboard-owned configuration.
-- Avoid page or business-specific logic.
+- 从 OpenWrt 原生能力读取系统状态。
+- 读取与写入 dashboard 自己的配置。
+- 不承载页面语义或业务聚合逻辑。
 
-### Shared Infrastructure
+### 通用基础层
 
-Planned shared helpers:
+计划中的公共辅助模块：
 
 - `luasrc/dashboard/http.lua`
 - `luasrc/dashboard/response.lua`
@@ -147,34 +147,34 @@ Planned shared helpers:
 - `luasrc/dashboard/validation.lua`
 - `luasrc/dashboard/capabilities.lua`
 
-Responsibilities:
+职责：
 
-- Common HTTP helpers
-- JSON success/error writers
-- Session validation
-- Argument validation
-- Runtime capability detection
+- 公共 HTTP 辅助
+- 统一 JSON 成功/失败响应
+- 会话校验
+- 参数校验
+- 运行时能力探测
 
-## Frontend Design
+## 前端设计
 
-The product remains a single page, but the page is no longer implemented as one giant template script.
+产品仍然是单页，但不再把所有结构、状态和逻辑都塞进一个模板脚本里。
 
-### Single-Page Shell
+### 单页外壳
 
-Primary view:
+主视图文件：
 
 - `luasrc/view/dashboard/main.htm`
 
-Responsibilities after refactor:
+重构后的职责：
 
-- Render the page shell only.
-- Define static layout zones.
-- Load shared frontend scripts.
-- Host containers for overview, foldable modules, and drawers/modals.
+- 只负责渲染单页外壳。
+- 定义固定布局区域。
+- 加载共享前端脚本。
+- 提供总览区、折叠区、弹层或抽屉容器。
 
-### Frontend Modules
+### 前端模块
 
-Planned static assets:
+计划中的静态资源：
 
 - `htdocs/luci-static/dashboard/app.js`
 - `htdocs/luci-static/dashboard/sections-overview.js`
@@ -185,117 +185,117 @@ Planned static assets:
 - `htdocs/luci-static/dashboard/sections-feature.js`
 - `htdocs/luci-static/dashboard/sections-settings.js`
 
-Responsibilities:
+职责：
 
-- Hydrate the page shell.
-- Fetch data per section.
-- Own rendering and event handling for each section.
-- Lazy-load lower-frequency sections on first expansion where appropriate.
+- 初始化单页外壳。
+- 按模块拉取数据。
+- 各自负责渲染与交互。
+- 在合适的场景下支持首次展开才加载。
 
-This keeps the user experience as a single page without preserving the current monolithic `main.htm` implementation style.
+这样可以保持“单页体验”，但不保留当前 `main.htm` 的单文件巨型实现方式。
 
-## Single-Page Layout
+## 单页布局
 
-The page is organized as overview-first, then expandable or heavier modules below.
+页面组织方式采用“总览优先，其余模块按频率和重量分层展示”。
 
-### Top Overview Zone
+### 顶部总览区
 
-Always visible on first load:
+首屏固定展示：
 
-- System summary
-- Network status
-- Real-time traffic
-- Online devices
-- Active domains
+- 系统摘要
+- 网络状态
+- 实时流量
+- 在线设备
+- 活跃域名
 
-This remains the primary first-screen dashboard view.
+这一部分继续作为首页第一屏核心区域。
 
-### User Center
+### 用户中心
 
-Displayed inside the single page:
+在单页内展示：
 
-- Paginated user/device table
-- Online status
-- Current rate
-- Today traffic
-- Common apps where available
-- Current domain or URL where available
-- Nickname editing
+- 分页用户/设备表格
+- 在线状态
+- 当前速率
+- 今日流量
+- 常用应用
+- 当前域名或 URL
+- 备注编辑
 
-User detail no longer navigates to a separate page in Stage 1. It opens inside the same page via a drawer or modal with tabs:
+用户详情在第一阶段不再跳转独立页面，而是在当前单页中通过抽屉或弹层打开，内部保留标签页：
 
-- Basic info
-- App statistics
-- Today traffic
-- Today top apps
-- Visit records
+- 基本信息
+- 应用统计
+- 今日流量
+- 今日 Top Apps
+- 访问记录
 
-### Network Settings
+### 网络设置
 
-Shown as one feature area with three foldable sub-panels:
+作为一个功能区展示，其中包含三个可折叠子面板：
 
 - LAN
 - WAN
-- Work mode
+- 工作模式
 
-Only high-frequency configuration is exposed directly.
+首页只开放高频配置项。
 
-### System Settings
+### 系统设置
 
-Stage 1 only exposes settings needed to support dashboard data correctness, especially:
+第一阶段只开放直接影响 dashboard 数据正确性的配置，优先包括：
 
 - `lan_ifname`
 
-### Record Settings
+### 记录设置
 
-Exposed inline:
+首页内开放：
 
-- enable
-- record retention time
-- app valid time
-- history data size
-- history data path
-- clean history action
+- 启用开关
+- 保留时长
+- 应用有效时长
+- 历史数据大小
+- 历史数据路径
+- 清理历史数据
 
-### Feature Library
+### 特征库
 
-Exposed inline:
+首页内展示：
 
-- current version
-- format
-- app count
-- feature class list
-- upload trigger
-- upgrade status
+- 当前版本
+- 格式
+- 应用数量
+- 特征分类列表
+- 上传入口
+- 升级状态
 
-### Dashboard Settings
+### Dashboard 设置
 
-Exposed inline:
+首页内展示：
 
-- monitor interface / monitor device selection
+- 监控接口或监控设备选择
 
-## Writable Configuration in Stage 1
+## 第一阶段允许直接写入的配置
 
-Stage 1 writes only these settings from the single page.
+第一阶段只允许从单页写入以下配置。
 
-### Dashboard Settings
+### Dashboard 设置
 
 - `monitor_device`
 
-### Network Settings
+### 网络设置
 
-- LAN protocol and addressing
+- LAN 协议与地址配置
 - LAN DNS
-- LAN DHCP settings
-- WAN protocol and addressing
-- WAN PPPoE credentials
-- dashboard-owned `work_mode`
+- LAN DHCP 配置
+- WAN 协议与地址配置
+- WAN PPPoE 账号密码
+- dashboard 自己维护的 `work_mode`
 
-### System Settings
+### 系统设置
 
 - `lan_ifname`
 
-### Record Settings
+### 记录设置
 
 - `enable`
 - `record_time`
@@ -304,20 +304,20 @@ Stage 1 writes only these settings from the single page.
 - `history_data_path`
 - `clean_all_data`
 
-### Feature Library
+### 特征库
 
-- Upload feature package
-- Query upgrade state
+- 上传特征包
+- 查询升级状态
 
-## API Design
+## API 设计
 
-All Stage 1 APIs are moved under a single root:
+第一阶段所有 API 统一收敛到一个根路径下：
 
 - `/admin/dashboard/api/`
 
-### Response Format
+### 返回格式
 
-Success:
+成功：
 
 ```json
 {
@@ -327,7 +327,7 @@ Success:
 }
 ```
 
-Failure:
+失败：
 
 ```json
 {
@@ -339,21 +339,21 @@ Failure:
 }
 ```
 
-This replaces the current inconsistent mix of raw JSON objects, `code=2000`, and ad hoc fallback payloads.
+这会替代当前散乱的返回形式，包括原始 JSON 对象、`code=2000` 和各类不一致的 fallback 数据。
 
-### Stage 1 Endpoints
+### 第一阶段接口
 
-Overview:
+总览：
 
 - `GET /admin/dashboard/api/overview`
 
-Users:
+用户：
 
 - `GET /admin/dashboard/api/users`
 - `GET /admin/dashboard/api/users/detail?mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF`
 - `POST /admin/dashboard/api/users/nickname`
 
-Network:
+网络：
 
 - `GET /admin/dashboard/api/network/lan`
 - `POST /admin/dashboard/api/network/lan`
@@ -362,43 +362,43 @@ Network:
 - `GET /admin/dashboard/api/network/work-mode`
 - `POST /admin/dashboard/api/network/work-mode`
 
-System:
+系统：
 
 - `GET /admin/dashboard/api/system/config`
 - `POST /admin/dashboard/api/system/config`
 
-Record:
+记录：
 
 - `GET /admin/dashboard/api/record/base`
 - `POST /admin/dashboard/api/record/base`
 - `POST /admin/dashboard/api/record/action`
 
-Feature:
+特征库：
 
 - `GET /admin/dashboard/api/feature/info`
 - `GET /admin/dashboard/api/feature/classes`
 - `POST /admin/dashboard/api/feature/upload`
 - `GET /admin/dashboard/api/feature/status`
 
-Dashboard settings:
+Dashboard 设置：
 
 - `GET /admin/dashboard/api/settings/dashboard`
 - `POST /admin/dashboard/api/settings/dashboard`
 
-### Overview Aggregation
+### 总览聚合接口
 
-The overview endpoint is intentionally aggregated.
+总览接口采用聚合设计。
 
-It returns:
+它会一次返回：
 
-- system summary
-- network summary
-- traffic summary
-- device summary
-- domain summary
-- capability flags
+- 系统摘要
+- 网络摘要
+- 流量摘要
+- 设备摘要
+- 域名摘要
+- 能力标记
 
-Example shape:
+示例结构：
 
 ```json
 {
@@ -418,274 +418,274 @@ Example shape:
 }
 ```
 
-This reduces first-load request fan-out, simplifies capability-based rendering, and gives the frontend one authoritative overview payload.
+这样做可以减少首页首屏请求扇出，方便前端基于能力标记做统一渲染和降级。
 
-## Data Sources on Standard OpenWrt
+## 标准 OpenWrt 下的数据来源
 
-Stage 1 intentionally targets standard OpenWrt instead of `fwx`.
+第一阶段明确以标准 OpenWrt 为目标环境，而不是默认假设 `fwx` 存在。
 
-### System Data
+### 系统数据
 
-Sources:
+来源：
 
 - `ubus system board`
 - `/proc/uptime`
 - `/proc/meminfo`
 - `/sys/class/thermal/*`
-- existing model and firmware detection logic already present in `dashboard.lua`
+- 当前 `dashboard.lua` 中已经存在的机型、固件和温度探测逻辑
 
-### Network Data
+### 网络数据
 
-Sources:
+来源：
 
 - `ubus network.interface.* status`
 - `ubus network.interface dump`
 - `uci network`
 - `uci dhcp`
 
-### Devices and Users
+### 设备和用户数据
 
-Sources:
+来源：
 
 - `/tmp/dhcp.leases`
 - `/proc/net/arp`
-- dashboard-owned nickname storage
-- optional `nlbwmon` data for traffic augmentation
+- dashboard 自己维护的备注存储
+- 可选的 `nlbwmon` 流量补充数据
 
-### Domain Activity
+### 域名活跃数据
 
-Priority order:
+优先级顺序：
 
-1. OpenClash logs
-2. `dnsmasq` logs from `logread`
-3. unavailable state
+1. OpenClash 日志
+2. `logread` 中的 `dnsmasq` 日志
+3. 无可用数据源
 
-### Feature Library
+### 特征库
 
-Stage 1 does not reuse `/etc/fwxd/feature.cfg` as the authoritative location.
+第一阶段不再把 `/etc/fwxd/feature.cfg` 当作权威存储。
 
-Instead it introduces dashboard-owned feature storage and metadata handling so the feature module can exist independently of `fwx`.
+它会改成 dashboard 自己管理特征文件和元数据，使特征库模块可以在没有 `fwx` 的环境中独立存在。
 
-The original `fwx_feature` implementation writes to:
+原始 `fwx_feature` 实现会写入：
 
 - `/etc/fwxd/feature.cfg`
 - `/www/luci-static/resources/app_icons/`
-- `fwxd` process signaling
+- 并向 `fwxd` 进程发信号
 
-Stage 1 replaces that design with dashboard-owned locations and status handling.
+第一阶段会用 dashboard 自己的存储路径和状态管理来替代这套做法。
 
-### Record Data
+### 记录数据
 
-The original `fwx_record` behavior depends on an `fwx` backend API.
+原始 `fwx_record` 依赖 `fwx` 后端 API。
 
-Stage 1 redefines record support around dashboard-managed history snapshots and configuration rather than pretending the `fwx` backend exists.
+第一阶段会把记录功能重定义为 dashboard 自己的历史快照与配置体系，而不是伪装成 `fwx` 后端仍然存在。
 
-## Dashboard-Owned Persistence
+## Dashboard 自有持久化
 
-Stage 1 introduces dashboard-owned configuration and runtime storage.
+第一阶段引入 dashboard 自己管理的配置和运行时存储。
 
-### Persistent UCI
+### 持久化 UCI
 
-New UCI config namespace:
+新的 UCI 配置命名空间：
 
 - `dashboard`
 
-Initial persistent fields:
+初始持久字段包括：
 
 - `monitor_device`
 - `lan_ifname`
 - `work_mode`
-- record configuration values
-- nickname mappings
-- feature metadata as needed
+- 记录模块相关配置
+- 备注映射
+- 特征库所需元数据
 
-### Runtime Cache
+### 运行时缓存
 
-Temporary runtime state:
+临时运行数据目录：
 
 - `/tmp/dashboard`
 
-### Persistent History Path
+### 历史数据目录
 
-Used by record/history features:
+用于记录和历史快照：
 
-- stored under the configured `history_data_path`
+- 存储在配置指定的 `history_data_path`
 
-History format is intentionally simple in Stage 1:
+第一阶段历史格式保持简单：
 
-- JSON or JSONL snapshots
+- JSON 或 JSONL 快照
 
-No embedded database is introduced in this stage.
+本阶段不引入嵌入式数据库。
 
-## Capability Detection and Degradation
+## 能力探测与降级策略
 
-Graceful degradation is a first-class requirement.
+明确降级能力是第一阶段的硬要求。
 
-### If `nlbwmon` Is Missing
+### 缺少 `nlbwmon`
 
-- Device list still works.
-- User traffic ranking and detailed per-user traffic become unavailable.
-- UI shows an explicit degraded-state message instead of blank data or a 500.
+- 设备列表仍然可用。
+- 用户流量排行和按用户细化的流量统计不可用。
+- UI 必须显示明确降级提示，不能空白，也不能默认 500。
 
-### If Domain Logs Are Unavailable
+### 缺少可用域名日志
 
-- Domain module remains visible.
-- UI shows that the current runtime environment does not expose a usable domain observation source.
+- 域名模块仍然展示。
+- UI 需要提示当前运行环境没有可用域名观测源。
 
-### If No Feature Package Exists Yet
+### 尚未上传特征包
 
-- Feature section remains available.
-- It shows empty state plus upload affordance.
+- 特征库模块仍然可用。
+- 展示空状态和上传入口。
 
-### If History Storage Cannot Be Used
+### 无法使用历史数据路径
 
-- Record section can still show current config.
-- Persistent history enablement is disabled or shown as unavailable.
+- 记录模块仍可展示当前配置。
+- 持久化历史能力需要被禁用或显示为不可用。
 
-### Work Mode Semantics
+### 工作模式语义
 
-On standard OpenWrt, `work_mode` is treated as dashboard-owned behavior and interpretation state.
+在标准 OpenWrt 上，`work_mode` 被视为 dashboard 自己的行为和展示语义配置。
 
-It does not claim to reconfigure the real data plane in the same way an `fwx` backend could.
+它不宣称能够像 `fwx` 后端那样真实改变数据平面行为。
 
-### User / App Recognition Limits
+### 用户与应用识别限制
 
-Stage 1 does not promise `fwx`-level app classification accuracy.
+第一阶段不承诺提供 `fwx` 级别的应用识别精度。
 
-Where the original `fwx` UX depends on deep kernel-assisted application identification, Stage 1 provides best-effort approximation only and clearly exposes unavailable states where necessary.
+凡是原始 `fwx` 页面依赖深度内核辅助应用识别的地方，第一阶段只能提供尽力而为的近似结果，或者明确显示能力缺失。
 
-## Error Handling
+## 错误处理
 
-### Input Validation
+### 输入校验
 
-Validation is centralized in shared helpers.
+校验逻辑统一收口到公共辅助模块。
 
-Fields that require validation include:
+需要校验的字段包括：
 
-- IPv4 addresses
-- netmasks
-- gateways
-- DNS addresses
-- PPPoE credentials
-- LAN interface names
-- feature upload format and size
-- record history size and path
+- IPv4 地址
+- 子网掩码
+- 网关
+- DNS 地址
+- PPPoE 凭据
+- LAN 接口名
+- 特征包上传格式和大小
+- 记录模块的历史数据大小与路径
 
-### Dangerous Actions
+### 危险操作
 
-Inline warnings are required for:
+以下操作必须提供明确警告：
 
-- LAN IP changes
-- operations that can interrupt current management connectivity
-- history cleanup
+- 修改 LAN IP
+- 任何可能导致当前管理连接断开的操作
+- 清理历史数据
 
-### Long-Running Actions
+### 长耗时操作
 
-These require visible status and non-blocking UX:
+以下动作必须提供可见状态反馈，并且不能卡死整页：
 
-- feature upload / extraction / validation
-- LAN reconfiguration feedback
-- record cleanup
+- 特征包上传、解压与校验
+- LAN 重配置后的等待提示
+- 记录数据清理
 
-## Testing Strategy
+## 测试策略
 
-Stage 1 testing is divided into parsing/unit checks, package integration checks, and functional acceptance.
+第一阶段测试分为解析逻辑检查、打包集成检查和功能验收三层。
 
-### Parsing and Logic Checks
+### 解析与逻辑检查
 
-Add focused tests or testable helper coverage for:
+需要为以下能力增加可测试的辅助逻辑或针对性测试：
 
-- DHCP lease parsing
-- ARP + lease + nickname merge
-- domain log parsing
-- LAN/WAN input validation
-- feature metadata validation
+- DHCP lease 解析
+- ARP + lease + nickname 合并
+- 域名日志解析
+- LAN/WAN 输入校验
+- 特征库元数据校验
 
-### Integration Verification
+### 集成验证
 
-- Lua syntax checks for all new modules
-- JavaScript syntax checks for new static assets
-- package build verification through the existing OpenWrt SDK workflow
+- 对所有新增 Lua 模块做语法检查
+- 对新增前端脚本做 JavaScript 语法检查
+- 通过现有 OpenWrt SDK 工作流验证打包
 
-The current GitHub Actions workflow in `.github/workflows/release.yml` must continue to produce a buildable IPK for `luci-app-dashboard`.
+当前 `.github/workflows/release.yml` 里的打包流程必须继续能为 `luci-app-dashboard` 产出可安装的 IPK。
 
-### Functional Acceptance
+### 功能验收
 
-Acceptance criteria:
+验收标准包括：
 
-- `/admin/dashboard` renders successfully on standard OpenWrt.
-- Missing optional capabilities do not break page rendering.
-- Overview data refreshes correctly.
-- User list renders and nickname editing works.
-- User detail overlay opens and loads section data.
-- LAN/WAN/system/record/dashboard-setting reads and writes function with validation and clear feedback.
-- Feature upload correctly handles success, invalid format, and oversized files.
-- No missing capability produces a blank page or a 500 by default.
+- `/admin/dashboard` 在标准 OpenWrt 上可以正常打开。
+- 可选能力缺失时不会导致页面渲染失败。
+- 首页总览数据可以正常刷新。
+- 用户列表可以渲染，备注编辑可以工作。
+- 用户详情抽屉或弹层可以打开并加载对应数据。
+- LAN/WAN/系统/记录/Dashboard 设置可以正常读写，并带有明确的校验与错误提示。
+- 特征包上传能正确处理成功、格式错误和超大文件。
+- 所有能力缺失都表现为“可见降级”，而不是空白页或默认 500。
 
-## Acceptance Definition
+## 完成定义
 
-Stage 1 is complete when all of the following are true:
+当以下条件全部满足时，第一阶段视为完成：
 
-- `luci-app-dashboard` remains a single-page dashboard entry.
-- Covered `fwx` Stage 1 features are integrated into that single page.
-- The implementation no longer depends on `fwxd` or `kmod-fwx`.
-- Backend code is split into controller, API, service, and source layers.
-- Frontend code is split into a shell and feature modules.
-- The plugin works on standard OpenWrt with graceful degradation.
-- The package still builds through CI and produces an installable IPK.
+- `luci-app-dashboard` 仍然保持单页 dashboard 入口。
+- 第一阶段范围内的 `fwx` 功能已经并入这个单页。
+- 实现已经不再依赖 `fwxd` 或 `kmod-fwx`。
+- 后端代码已经拆成控制器、API、service 和 source 层。
+- 前端代码已经拆成单页外壳和功能模块。
+- 插件在标准 OpenWrt 上可以运行，并具备明确降级能力。
+- 现有 CI 仍能打包出可安装的 IPK。
 
-## Risks
+## 风险
 
-### 1. Monolith Regression
+### 1. 再次变成单体
 
-If the refactor stops halfway, `dashboard.lua` and `main.htm` can become even larger and harder to maintain.
+如果重构做了一半停住，`dashboard.lua` 和 `main.htm` 会变得比现在更大、更难维护。
 
-Mitigation:
+缓解方式：
 
-- move routing first
-- move service logic second
-- move frontend section logic into static modules early
+- 先拆路由
+- 再拆 service
+- 尽早把前端区块逻辑迁到独立静态模块
 
-### 2. False Equivalence to `fwx`
+### 2. 对 `fwx` 能力的错误等价
 
-Some original views imply backend semantics that ordinary OpenWrt does not have.
+原始页面中有些能力在普通 OpenWrt 上并不存在等价后端语义。
 
-Mitigation:
+缓解方式：
 
-- explicitly define capability flags
-- do not fake unsupported deep app recognition
-- degrade visibly and honestly
+- 明确能力标记
+- 不伪造深度应用识别
+- 对不支持项做显式降级
 
-### 3. Feature Upload Coupling
+### 3. 特征包上传与 `fwx` 的耦合
 
-The original feature upload path is tightly coupled to `fwxd`.
+原始特征包上传路径与 `fwxd` 强耦合。
 
-Mitigation:
+缓解方式：
 
-- replace storage locations and signaling behavior with dashboard-owned logic
-- keep upload validation self-contained
+- 改用 dashboard 自己的存储位置和状态逻辑
+- 把上传校验做成自包含实现
 
-### 4. Single-Page Complexity
+### 4. 单页复杂度过高
 
-A single page can still become operationally dense.
+单页本身也可能变得太重。
 
-Mitigation:
+缓解方式：
 
-- use foldable sections
-- lazy-load low-frequency modules
-- keep heavy detail views in drawers or modals
+- 使用折叠区
+- 低频模块延迟加载
+- 重内容详情用抽屉或弹层承载
 
-## Recommended Implementation Order
+## 推荐实施顺序
 
-Recommended order for Stage 1 execution:
+建议按以下顺序推进第一阶段实现：
 
-1. Introduce shared response, session, validation, and capability helpers.
-2. Move routing in `dashboard.lua` to module dispatch.
-3. Implement dashboard-owned config storage.
-4. Implement overview and capability APIs.
-5. Extract frontend shell and static section modules.
-6. Implement user list and user detail support.
-7. Implement network and system writable sections.
-8. Implement record support with dashboard-owned persistence.
-9. Implement feature storage, upload, and class rendering.
-10. Finalize degradation states and acceptance verification.
+1. 引入公共 response、session、validation 和 capability 辅助模块。
+2. 将 `dashboard.lua` 的路由重构为模块分发。
+3. 引入 dashboard 自己的配置存储。
+4. 实现 overview 和 capability 相关 API。
+5. 提取单页外壳与前端功能模块。
+6. 实现用户列表和用户详情能力。
+7. 实现网络和系统可写模块。
+8. 实现基于 dashboard 自有持久化的记录能力。
+9. 实现特征库存储、上传与分类展示。
+10. 完成降级态收口与验收验证。
