@@ -43,6 +43,7 @@ do
         message = ""
       }
     end,
+    write_bundle = function() end,
     import_bundle = function(tmp_path, filename)
       _G.imported_feature_bundle = {
         tmp_path = tmp_path,
