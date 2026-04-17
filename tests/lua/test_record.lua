@@ -31,7 +31,8 @@ do
       ["/tmp/dashboard/history/day-2.json"] = true,
       ["/tmp/dashboard/history.json"] = true,
       ["/tmp/dashboard/link-out"] = true,
-      ["/tmp/dashboard/history/link-child"] = true
+      ["/tmp/dashboard/history/link-child"] = true,
+      ["/tmp/dashboard/broken-link"] = true
     },
     dirs = {
       ["/tmp/dashboard/history"] = { "day-1.json", "day-2.json" }
@@ -42,6 +43,7 @@ do
       ["/tmp/dashboard/history/day-2.json"] = { type = "file" },
       ["/tmp/dashboard/history.json"] = { type = "file" },
       ["/tmp/dashboard/history/link-child"] = { type = "dir" },
+      ["/tmp/dashboard/broken-link"] = { type = "link" },
       ["/etc/passwd"] = { type = "file" }
     },
     realpaths = {
@@ -91,6 +93,9 @@ do
         end
       end,
       stat = function(path)
+        return fs_state.stats[path]
+      end,
+      lstat = function(path)
         return fs_state.stats[path]
       end,
       realpath = function(path)
@@ -145,6 +150,11 @@ do
   assert(link_ok == nil, "record store clear should reject symlink escape path")
   assert(link_err == "invalid_history_data_path", "record store clear should reject symlink escape path")
 
+  cursor_state.values.history_data_path = "/tmp/dashboard/broken-link"
+  local broken_link_ok, broken_link_err = store.clear()
+  assert(broken_link_ok == nil, "record store clear should reject broken symlink path")
+  assert(broken_link_err == "invalid_history_data_path", "record store clear should reject broken symlink path")
+
   cursor_state.values.history_data_path = "/"
   local bad_ok, bad_err = store.clear()
   assert(bad_ok == nil, "record store clear should reject unsafe path")
@@ -158,6 +168,21 @@ do
         or path == "/tmp/dashboard/link-out"
         or path == "/tmp/dashboard/link"
     end,
+    lstat = function(path)
+      if path == "/tmp/dashboard/history.json" then
+        return {
+          type = "file"
+        }
+      end
+
+      if path == "/tmp/dashboard/link-out" or path == "/tmp/dashboard/link" or path == "/tmp/dashboard/broken-link" then
+        return {
+          type = "link"
+        }
+      end
+
+      return nil
+    end,
     realpath = function(path)
       if path == "/tmp/dashboard/link-out" then
         return "/etc/passwd"
@@ -165,6 +190,10 @@ do
 
       if path == "/tmp/dashboard/link" then
         return "/etc"
+      end
+
+      if path == "/tmp/dashboard/broken-link" then
+        return nil
       end
 
       return path
@@ -254,6 +283,17 @@ do
   assert(invalid_parent_link_payload == nil, "path under symlinked parent should fail validation")
   assert(invalid_parent_link_err == "invalid_history_data_path", "path under symlinked parent should report invalid_history_data_path")
   assert(invalid_parent_link_details.field == "history_data_path", "path under symlinked parent should identify field")
+
+  local invalid_broken_parent_payload, invalid_broken_parent_err, invalid_broken_parent_details = record.validate({
+    enable = "1",
+    record_time = "7",
+    app_valid_time = "5",
+    history_data_size = "128",
+    history_data_path = "/tmp/dashboard/broken-link/records"
+  })
+  assert(invalid_broken_parent_payload == nil, "path under broken symlink parent should fail validation")
+  assert(invalid_broken_parent_err == "invalid_history_data_path", "path under broken symlink parent should report invalid_history_data_path")
+  assert(invalid_broken_parent_details.field == "history_data_path", "path under broken symlink parent should identify field")
 
   local invalid_payload, invalid_err, invalid_details = record.validate({
     enable = "1",

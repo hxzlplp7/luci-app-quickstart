@@ -35,10 +35,18 @@ end
 
 local function resolve_path(path)
   if type(fs.realpath) == "function" then
-    return fs.realpath(path) or path
+    return fs.realpath(path)
   end
 
   return path
+end
+
+local function path_exists(path)
+  if type(fs.lstat) == "function" then
+    return fs.lstat(path) ~= nil
+  end
+
+  return type(fs.access) == "function" and fs.access(path) or false
 end
 
 local function parent_path(path)
@@ -54,9 +62,9 @@ local function existing_path_is_invalid_dir(path)
   local current = trim(path)
 
   while current ~= "" do
-    if type(fs.access) == "function" and fs.access(current) then
+    if path_exists(current) then
       local resolved = resolve_path(current)
-      if resolved ~= current or not is_safe_history_path(resolved) then
+      if resolved == nil or resolved ~= current or not is_safe_history_path(resolved) then
         return true
       end
 

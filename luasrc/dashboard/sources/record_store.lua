@@ -31,10 +31,18 @@ end
 
 local function resolve_path(path)
   if type(fs.realpath) == "function" then
-    return fs.realpath(path) or path
+    return fs.realpath(path)
   end
 
   return path
+end
+
+local function path_exists(path)
+  if type(fs.lstat) == "function" then
+    return fs.lstat(path) ~= nil
+  end
+
+  return type(fs.access) == "function" and fs.access(path) or false
 end
 
 local function stat_type(path)
@@ -120,12 +128,12 @@ function M.clear()
     return nil, "invalid_history_data_path"
   end
 
-  if not fs.access(history_path) then
+  if not path_exists(history_path) then
     return true
   end
 
   resolved_path = resolve_path(history_path)
-  if resolved_path ~= history_path or not is_safe_history_path(resolved_path) then
+  if resolved_path == nil or resolved_path ~= history_path or not is_safe_history_path(resolved_path) then
     return nil, "invalid_history_data_path"
   end
 
