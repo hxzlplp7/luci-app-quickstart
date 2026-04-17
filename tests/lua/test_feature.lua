@@ -1,3 +1,5 @@
+---@diagnostic disable: duplicate-set-field
+
 local function reset_package(name)
   package.loaded[name] = nil
   package.preload[name] = nil

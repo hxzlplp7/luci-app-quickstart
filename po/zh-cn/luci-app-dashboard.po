@@ -150,4 +150,4 @@ msgid "Upload Feature Bundle"
 msgstr "上传特征包"
 
 msgid "Capability Unavailable"
-msgstr "能力不可用"
+msgstr "功能不可用"
