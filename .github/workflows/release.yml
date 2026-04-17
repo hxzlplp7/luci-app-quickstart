@@ -38,10 +38,31 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.1
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Run Host Checks
         run: |
           lua5.1 tests/lua/run.lua tests/lua/test_response.lua
           lua5.1 tests/lua/run.lua tests/lua/test_validation.lua
+          lua5.1 tests/lua/run.lua tests/lua/test_overview.lua
+          lua5.1 tests/lua/run.lua tests/lua/test_users.lua
+          lua5.1 tests/lua/run.lua tests/lua/test_network.lua
+          lua5.1 tests/lua/run.lua tests/lua/test_network_source.lua
+          lua5.1 tests/lua/run.lua tests/lua/test_record.lua
+          lua5.1 tests/lua/run.lua tests/lua/test_feature.lua
+          node --test tests/js/overview.test.mjs tests/js/shell.test.mjs tests/js/users.test.mjs tests/js/api.test.mjs tests/js/record.test.mjs tests/js/app-record.test.mjs tests/js/feature.test.mjs
+          node --check htdocs/luci-static/dashboard/app.js
+          node --check htdocs/luci-static/dashboard/api.js
+          node --check htdocs/luci-static/dashboard/shell.js
+          node --check htdocs/luci-static/dashboard/sections-overview.js
+          node --check htdocs/luci-static/dashboard/sections-users.js
+          node --check htdocs/luci-static/dashboard/sections-network.js
+          node --check htdocs/luci-static/dashboard/sections-system.js
+          node --check htdocs/luci-static/dashboard/sections-record.js
+          node --check htdocs/luci-static/dashboard/sections-feature.js
+          node --check htdocs/luci-static/dashboard/sections-settings.js
 
       - name: Build Package
         uses: openwrt/gh-action-sdk@main

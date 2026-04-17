@@ -164,3 +164,27 @@ msgstr ""
 
 msgid "Directory"
 msgstr ""
+
+msgid "Users"
+msgstr ""
+
+msgid "User Detail"
+msgstr ""
+
+msgid "Edit Remark"
+msgstr ""
+
+msgid "Record Settings"
+msgstr ""
+
+msgid "Clear History"
+msgstr ""
+
+msgid "Feature Library"
+msgstr ""
+
+msgid "Upload Feature Bundle"
+msgstr ""
+
+msgid "Capability Unavailable"
+msgstr ""

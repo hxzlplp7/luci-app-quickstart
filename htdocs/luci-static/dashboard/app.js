@@ -3,6 +3,8 @@ import { loadOverview } from './sections-overview.js';
 import { loadRecordSettings, runRecordAction, saveRecordSettings } from './sections-record.js';
 import { loadUserDetail, loadUsers, saveUserRemark } from './sections-users.js';
 
+export const registeredSections = ['overview', 'users', 'network', 'system', 'record', 'feature', 'settings'];
+
 const SECTION_META = {
   overview: {
     title: 'Overview',
@@ -708,7 +710,9 @@ export async function bootstrapDashboard() {
     userDrawer: createUserDrawerState(),
   };
 
-  for (const sectionName of ['network', 'system', 'feature', 'settings']) {
+  for (const sectionName of registeredSections.filter(
+    (sectionName) => sectionName !== 'overview' && sectionName !== 'users' && sectionName !== 'record'
+  )) {
     renderPlaceholder(sectionName);
   }
 

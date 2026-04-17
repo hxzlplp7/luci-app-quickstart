@@ -128,3 +128,26 @@ msgstr "未检测到真实数据，当前为演示内容"
 
 msgid "Overview"
 msgstr "概览"
+msgid "Users"
+msgstr "用户"
+
+msgid "User Detail"
+msgstr "用户详情"
+
+msgid "Edit Remark"
+msgstr "编辑备注"
+
+msgid "Record Settings"
+msgstr "记录设置"
+
+msgid "Clear History"
+msgstr "清空历史"
+
+msgid "Feature Library"
+msgstr "特征库"
+
+msgid "Upload Feature Bundle"
+msgstr "上传特征包"
+
+msgid "Capability Unavailable"
+msgstr "能力不可用"

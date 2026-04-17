@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const shellModuleUrl = new URL('../../htdocs/luci-static/dashboard/shell.js', import.meta.url);
+const appModuleUrl = new URL('../../htdocs/luci-static/dashboard/app.js', import.meta.url);
 
 test('buildSectionState returns the expected shell defaults', async () => {
   const { buildSectionState } = await import(shellModuleUrl);
@@ -20,4 +21,13 @@ test('buildSectionState returns the expected shell defaults', async () => {
     assert.equal(typeof state[sectionName].loaded, 'boolean');
     assert.equal(state[sectionName].error, null);
   }
+});
+
+test('registeredSections exposes all stage1 modules', async () => {
+  const { registeredSections } = await import(appModuleUrl);
+
+  assert.deepEqual(
+    [...registeredSections].sort(),
+    ['feature', 'network', 'overview', 'record', 'settings', 'system', 'users'].sort()
+  );
 });
