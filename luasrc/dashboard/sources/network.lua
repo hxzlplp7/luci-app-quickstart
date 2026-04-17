@@ -181,28 +181,43 @@ function M.read_lan()
   }
 end
 
-function M.write_lan(payload)
-  local cursor = get_cursor()
-  local values = type(payload) == "table" and payload or {}
+local function apply_lan(cursor, values)
   local dns = type(values.dns) == "table" and values.dns or {}
 
   cursor:set("network", "lan", "proto", tostring(values.proto or ""))
   cursor:set("network", "lan", "ipaddr", tostring(values.ipaddr or ""))
   cursor:set("network", "lan", "netmask", tostring(values.netmask or ""))
-
   cursor:set("network", "lan", "gateway", tostring(values.gateway or ""))
+
   if type(cursor.set_list) == "function" then
     cursor:set_list("network", "lan", "dns", dns)
   else
     cursor:set("network", "lan", "dns", table.concat(dns, " "))
   end
+end
+
+function M.write_lan(payload)
+  local previous = M.read_lan()
+  local cursor = get_cursor()
+  local values = type(payload) == "table" and payload or {}
+
+  apply_lan(cursor, values)
   cursor:save("network")
   cursor:commit("network")
 
   if values.lan_ifname ~= nil then
-    config.write_core({
+    local ok, err = pcall(config.write_core, {
       lan_ifname = tostring(values.lan_ifname)
     })
+
+    if not ok or err == false then
+      local rollback_cursor = get_cursor()
+      apply_lan(rollback_cursor, previous)
+      rollback_cursor:save("network")
+      rollback_cursor:commit("network")
+
+      error(ok and "dashboard core update failed" or tostring(err))
+    end
   end
 
   return M.read_lan()

@@ -83,7 +83,15 @@ package.preload["luci.dashboard.sources.network"] = function()
         username = payload.username,
         password = payload.password
       }
-      return true
+      return {
+        proto = payload.proto,
+        ipaddr = payload.ipaddr,
+        netmask = payload.netmask,
+        gateway = payload.gateway,
+        dns = payload.dns,
+        username = payload.username,
+        password = payload.password
+      }
     end,
     read_work_mode = function()
       return {
@@ -176,6 +184,17 @@ assert(wan_payload ~= nil, "valid static wan payload rejected")
 assert(wan_err == nil, "valid static wan payload returned error")
 assert(#wan_payload.dns == 2, "wan dns should keep both entries")
 
+local saved_wan = service.set_wan({
+  proto = "pppoe",
+  dns = { "9.9.9.9" },
+  username = "dialer",
+  password = "secret"
+})
+assert(saved_wan.proto == "pppoe", "set_wan should return wan proto")
+assert(saved_wan.dns[1] == "9.9.9.9", "set_wan should return wan dns")
+assert(saved_wan.username == "dialer", "set_wan should return wan username")
+assert(saved_wan.password == "secret", "set_wan should return wan password")
+
 local invalid_wan, invalid_wan_err, invalid_wan_details = service.validate_wan_payload({
   proto = "static",
   ipaddr = "10.0.0.2",
@@ -186,6 +205,15 @@ local invalid_wan, invalid_wan_err, invalid_wan_details = service.validate_wan_p
 assert(invalid_wan == nil, "invalid wan payload should fail")
 assert(invalid_wan_err == "invalid_dns", "invalid dns should report invalid_dns")
 assert(invalid_wan_details.field == "dns", "invalid wan error should identify dns")
+
+local invalid_pppoe, invalid_pppoe_err, invalid_pppoe_details = service.validate_wan_payload({
+  proto = "pppoe",
+  username = "dialer",
+  password = ""
+})
+assert(invalid_pppoe == nil, "pppoe without password should fail")
+assert(invalid_pppoe_err == "invalid_password", "pppoe without password should report invalid_password")
+assert(invalid_pppoe_details.field == "password", "pppoe invalid password should identify password")
 
 local work_mode = service.get_work_mode()
 assert(work_mode.work_mode == "0", "initial work mode should come from core config")

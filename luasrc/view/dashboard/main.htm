@@ -10,6 +10,7 @@
             id="dashboard-app"
             class="dashboard-app"
             data-api-base="<%=url("admin/dashboard/api")%>"
+            data-session-token="<%=session_token or ""%>"
             aria-live="polite"
         >
             <section class="dashboard-panel" data-section="overview"></section>

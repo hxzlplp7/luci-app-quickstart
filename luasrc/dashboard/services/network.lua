@@ -144,6 +144,9 @@ function M.validate_wan_payload(payload)
     if username == "" then
       return invalid("invalid_username", "username", username)
     end
+    if password == "" then
+      return invalid("invalid_password", "password", password)
+    end
 
     normalized.username = username
     normalized.password = password

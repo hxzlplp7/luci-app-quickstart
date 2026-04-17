@@ -1,5 +1,13 @@
 const DEFAULT_API_BASE = '/cgi-bin/luci/admin/dashboard/api';
 
+function resolveMount() {
+  if (typeof document !== 'undefined' && typeof document.getElementById === 'function') {
+    return document.getElementById('dashboard-app');
+  }
+
+  return null;
+}
+
 function readErrorMessage(error, fallbackMessage) {
   if (typeof error === 'string' && error) {
     return error;
@@ -19,26 +27,44 @@ function readErrorMessage(error, fallbackMessage) {
 }
 
 function resolveApiBase() {
-  if (typeof document !== 'undefined' && typeof document.getElementById === 'function') {
-    const mount = document.getElementById('dashboard-app');
-    if (mount && mount.dataset && mount.dataset.apiBase) {
-      return mount.dataset.apiBase;
-    }
+  const mount = resolveMount();
+  if (mount && mount.dataset && mount.dataset.apiBase) {
+    return mount.dataset.apiBase;
   }
 
   return DEFAULT_API_BASE;
 }
 
+function resolveSessionToken() {
+  const mount = resolveMount();
+  if (mount && mount.dataset && mount.dataset.sessionToken) {
+    return mount.dataset.sessionToken;
+  }
+
+  return '';
+}
+
+function resolveMethod(options) {
+  return String((options && options.method) || 'GET').toUpperCase();
+}
+
 export async function dashboardApi(path, options = {}) {
   const requestPath = path.startsWith('/') ? path : `/${path}`;
+  const method = resolveMethod(options);
   const headers = {
     Accept: 'application/json',
     ...(options.headers || {}),
   };
+  const sessionToken = resolveSessionToken();
+
+  if (method !== 'GET' && method !== 'HEAD' && sessionToken && !headers['X-Dashboard-CSRF-Token']) {
+    headers['X-Dashboard-CSRF-Token'] = sessionToken;
+  }
 
   const response = await fetch(`${resolveApiBase()}${requestPath}`, {
     credentials: 'same-origin',
     ...options,
+    method,
     headers,
   });
 

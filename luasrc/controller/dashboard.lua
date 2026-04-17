@@ -60,8 +60,19 @@ local function write_error(status_code, status_message, code, message)
   })
 end
 
+local function validate_csrf(session_values)
+  local request_token = tostring(http.getenv("HTTP_X_DASHBOARD_CSRF_TOKEN") or "")
+  local session_token = ""
+
+  if type(session_values) == "table" then
+    session_token = tostring(session_values.token or "")
+  end
+
+  return session_token ~= "" and request_token == session_token
+end
+
 local function dispatch_api()
-  local sid = session.require_session()
+  local sid, session_values = session.require_session()
   if not sid then
     write_error(403, "Forbidden", "forbidden", "forbidden")
     return
@@ -69,6 +80,11 @@ local function dispatch_api()
 
   local request_uri = http.getenv("REQUEST_URI") or ""
   local method = http.getenv("REQUEST_METHOD") or "GET"
+  if method ~= "GET" and not validate_csrf(session_values) then
+    write_error(403, "Forbidden", "invalid_csrf", "invalid csrf token")
+    return
+  end
+
   local path = request_uri:match("/admin/dashboard/api(/.*)") or "/"
   path = path:gsub("%?.*$", "")
   local route_key = method .. ":" .. path
@@ -115,7 +131,10 @@ function dashboard_dispatch()
     return dispatch_api()
   end
 
+  local _, session_values = session.require_session()
+
   require("luci.template").render(PAGE_TEMPLATE, {
-    prefix = dispatcher.build_url("admin", "dashboard")
+    prefix = dispatcher.build_url("admin", "dashboard"),
+    session_token = type(session_values) == "table" and tostring(session_values.token or "") or ""
   })
 end

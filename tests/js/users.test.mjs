@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const usersModuleUrl = new URL('../../htdocs/luci-static/dashboard/sections-users.js', import.meta.url);
 const appModuleUrl = new URL('../../htdocs/luci-static/dashboard/app.js', import.meta.url);
 
-function installDashboardApp(apiBase) {
+function installDashboardApp(apiBase, sessionToken = '') {
   const originalDocument = globalThis.document;
 
   globalThis.document = {
@@ -13,6 +13,7 @@ function installDashboardApp(apiBase) {
         return {
           dataset: {
             apiBase,
+            sessionToken,
           },
         };
       }
@@ -156,7 +157,7 @@ test('loadUserDetail requests encoded mac detail endpoint', async () => {
 
 test('saveUserRemark posts mac and value form fields', async () => {
   const originalFetch = globalThis.fetch;
-  const restoreDocument = installDashboardApp('/proxy/base/admin/dashboard/api');
+  const restoreDocument = installDashboardApp('/proxy/base/admin/dashboard/api', 'csrf-users-1');
   const requests = [];
 
   globalThis.fetch = async (url, options = {}) => {
@@ -186,6 +187,7 @@ test('saveUserRemark posts mac and value form fields', async () => {
       requests[0].options.headers['Content-Type'],
       'application/x-www-form-urlencoded;charset=UTF-8'
     );
+    assert.equal(requests[0].options.headers['X-Dashboard-CSRF-Token'], 'csrf-users-1');
     assert.equal(requests[0].options.body, 'mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF&value=Desk+Phone');
     assert.deepEqual(payload, { saved: true });
   } finally {
