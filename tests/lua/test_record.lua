@@ -49,6 +49,10 @@ do
       ["/etc/passwd"] = { type = "file" }
     },
     realpaths = {
+      ["/tmp/dashboard/history"] = "/tmp/dashboard/history",
+      ["/tmp/dashboard/history/day-1.json"] = "/tmp/dashboard/history/day-1.json",
+      ["/tmp/dashboard/history/day-2.json"] = "/tmp/dashboard/history/day-2.json",
+      ["/tmp/dashboard/history.json"] = "/tmp/dashboard/history.json",
       ["/tmp/dashboard/link-out"] = "/etc/passwd",
       ["/tmp/dashboard/history/link-child"] = "/etc/passwd"
     },
