@@ -313,6 +313,9 @@ do
       if name == "REQUEST_METHOD" then
         return request_method
       end
+      if name == "HTTP_X_DASHBOARD_CSRF_TOKEN" then
+        return "t"
+      end
       return nil
     end,
     prepare_content = function() end,
