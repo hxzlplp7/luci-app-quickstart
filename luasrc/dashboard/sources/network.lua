@@ -169,21 +169,41 @@ end
 
 function M.read_lan()
   local cursor = get_cursor()
+  local core = config.read_core()
 
   return {
+    proto = read_string(cursor, "network", "lan", "proto"),
     ipaddr = read_string(cursor, "network", "lan", "ipaddr"),
-    netmask = read_string(cursor, "network", "lan", "netmask")
+    netmask = read_string(cursor, "network", "lan", "netmask"),
+    gateway = read_string(cursor, "network", "lan", "gateway"),
+    dns = read_list(cursor, "network", "lan", "dns"),
+    lan_ifname = tostring(core.lan_ifname or "")
   }
 end
 
 function M.write_lan(payload)
   local cursor = get_cursor()
   local values = type(payload) == "table" and payload or {}
+  local dns = type(values.dns) == "table" and values.dns or {}
 
+  cursor:set("network", "lan", "proto", tostring(values.proto or ""))
   cursor:set("network", "lan", "ipaddr", tostring(values.ipaddr or ""))
   cursor:set("network", "lan", "netmask", tostring(values.netmask or ""))
+
+  cursor:set("network", "lan", "gateway", tostring(values.gateway or ""))
+  if type(cursor.set_list) == "function" then
+    cursor:set_list("network", "lan", "dns", dns)
+  else
+    cursor:set("network", "lan", "dns", table.concat(dns, " "))
+  end
   cursor:save("network")
   cursor:commit("network")
+
+  if values.lan_ifname ~= nil then
+    config.write_core({
+      lan_ifname = tostring(values.lan_ifname)
+    })
+  end
 
   return M.read_lan()
 end
@@ -227,12 +247,19 @@ function M.write_wan(payload)
 end
 
 function M.read_work_mode()
-  return tostring(config.read_core().work_mode or "")
+  return {
+    work_mode = tostring(config.read_core().work_mode or "")
+  }
 end
 
 function M.write_work_mode(value)
+  local mode = value
+  if type(value) == "table" then
+    mode = value.work_mode
+  end
+
   config.write_core({
-    work_mode = tostring(value or "")
+    work_mode = tostring(mode or "")
   })
 
   return M.read_work_mode()

@@ -4,8 +4,12 @@ function normalizeLanConfig(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
 
   return {
+    proto: String(source.proto || ''),
     ipaddr: String(source.ipaddr || ''),
     netmask: String(source.netmask || ''),
+    gateway: String(source.gateway || ''),
+    dns: Array.isArray(source.dns) ? [...source.dns] : [],
+    lan_ifname: String(source.lan_ifname || ''),
   };
 }
 
@@ -40,6 +44,9 @@ export async function loadLanConfig() {
 }
 
 export async function saveLanConfig(payload) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const dns = Array.isArray(source.dns) ? source.dns.join(',') : String(source.dns || '');
+
   return normalizeLanConfig(
     await dashboardApi('/network/lan', {
       method: 'POST',
@@ -47,8 +54,12 @@ export async function saveLanConfig(payload) {
         'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
       },
       body: encodeBody({
-        ipaddr: payload && payload.ipaddr ? payload.ipaddr : '',
-        netmask: payload && payload.netmask ? payload.netmask : '',
+        proto: source.proto || '',
+        ipaddr: source.ipaddr || '',
+        netmask: source.netmask || '',
+        gateway: source.gateway || '',
+        dns,
+        lan_ifname: source.lan_ifname || '',
       }),
     })
   );

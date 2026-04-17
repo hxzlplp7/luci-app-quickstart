@@ -47,8 +47,13 @@ local function normalize_dns(value)
 end
 
 local function normalize_work_mode(value)
-  local mode = trim(value)
-  if mode ~= "0" and mode ~= "1" then
+  local mode = value
+  if type(value) == "table" then
+    mode = value.work_mode
+  end
+
+  mode = trim(mode)
+  if mode ~= "0" and mode ~= "1" and mode ~= "2" then
     return invalid("invalid_work_mode", "work_mode", mode)
   end
 
@@ -57,19 +62,43 @@ end
 
 function M.validate_lan_payload(payload)
   local source = type(payload) == "table" and payload or {}
+  local proto = trim(source.proto)
   local ipaddr = trim(source.ipaddr)
   local netmask = trim(source.netmask)
+  local gateway = trim(source.gateway)
+  local lan_ifname = trim(source.lan_ifname)
+  local dns, dns_err, dns_details = normalize_dns(source.dns)
 
-  if not validation.is_ipv4(ipaddr) then
-    return invalid("invalid_ipaddr", "ipaddr", ipaddr)
+  if dns == nil then
+    return nil, dns_err, dns_details
   end
-  if not validation.is_netmask(netmask) then
-    return invalid("invalid_netmask", "netmask", netmask)
+  if proto ~= "static" and proto ~= "dhcp" then
+    return invalid("invalid_proto", "proto", proto)
+  end
+  if proto == "static" or ipaddr ~= "" then
+    if not validation.is_ipv4(ipaddr) then
+      return invalid("invalid_ipaddr", "ipaddr", ipaddr)
+    end
+  end
+  if proto == "static" or netmask ~= "" then
+    if not validation.is_netmask(netmask) then
+      return invalid("invalid_netmask", "netmask", netmask)
+    end
+  end
+  if gateway ~= "" and not validation.is_ipv4(gateway) then
+    return invalid("invalid_gateway", "gateway", gateway)
+  end
+  if lan_ifname == "" or not validation.is_iface_name(lan_ifname) then
+    return invalid("invalid_lan_ifname", "lan_ifname", lan_ifname)
   end
 
   return {
+    proto = proto,
     ipaddr = ipaddr,
-    netmask = netmask
+    netmask = netmask,
+    gateway = gateway,
+    dns = dns,
+    lan_ifname = lan_ifname
   }
 end
 
@@ -150,8 +179,15 @@ function M.set_wan(payload)
 end
 
 function M.get_work_mode()
+  local payload = network.read_work_mode()
+  if type(payload) == "table" and payload.work_mode ~= nil then
+    return {
+      work_mode = tostring(payload.work_mode)
+    }
+  end
+
   return {
-    work_mode = tostring(network.read_work_mode() or config.read_core().work_mode or "")
+    work_mode = tostring(config.read_core().work_mode or "")
   }
 end
 
@@ -161,8 +197,17 @@ function M.set_work_mode(value)
     return nil, err, details
   end
 
+  local payload = network.write_work_mode({
+    work_mode = mode
+  })
+  if type(payload) == "table" and payload.work_mode ~= nil then
+    return {
+      work_mode = tostring(payload.work_mode)
+    }
+  end
+
   return {
-    work_mode = tostring(network.write_work_mode(mode) or mode)
+    work_mode = tostring(mode)
   }
 end
 

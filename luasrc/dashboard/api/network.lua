@@ -16,8 +16,12 @@ end
 
 function M.post_lan()
   local payload, err, details = network.set_lan({
+    proto = http.formvalue("proto"),
     ipaddr = http.formvalue("ipaddr"),
-    netmask = http.formvalue("netmask")
+    netmask = http.formvalue("netmask"),
+    gateway = http.formvalue("gateway"),
+    dns = http.formvalue("dns"),
+    lan_ifname = http.formvalue("lan_ifname")
   })
 
   if not payload then
@@ -56,7 +60,9 @@ function M.get_work_mode()
 end
 
 function M.post_work_mode()
-  local payload, err, details = network.set_work_mode(http.formvalue("work_mode"))
+  local payload, err, details = network.set_work_mode({
+    work_mode = http.formvalue("work_mode")
+  })
 
   if not payload then
     write(response.fail(err, "invalid work mode", details))
