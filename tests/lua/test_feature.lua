@@ -101,7 +101,7 @@ do
   package.loaded["luci.dashboard.sources.feature_store"] = {
     read_info = function()
       return {
-        version = "",
+        version = "2026.04.16",
         format = "v3.0",
         app_count = "bad"
       }
