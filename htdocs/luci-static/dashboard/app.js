@@ -18,12 +18,12 @@ const SECTION_META = {
     title: 'System',
     subtitle: 'Waiting for module wiring',
   },
-  records: {
-    title: 'Records',
+  record: {
+    title: 'Record',
     subtitle: 'Waiting for module wiring',
   },
-  features: {
-    title: 'Features',
+  feature: {
+    title: 'Feature',
     subtitle: 'Waiting for module wiring',
   },
   settings: {
@@ -160,30 +160,30 @@ async function bootstrapDashboard() {
     return;
   }
 
-  const sections = buildSectionState();
+  const state = buildSectionState();
   window.dashboardState = {
-    sections,
+    state,
     overview: null,
   };
 
-  for (const sectionName of ['users', 'network', 'system', 'records', 'features', 'settings']) {
+  for (const sectionName of ['users', 'network', 'system', 'record', 'feature', 'settings']) {
     renderPlaceholder(sectionName);
   }
 
   renderOverviewLoading();
   refreshIcons();
 
-  sections.overview.loading = true;
+  state.overview.loading = true;
 
   try {
     const overview = await loadOverview();
-    sections.overview.loading = false;
-    sections.overview.loaded = true;
+    state.overview.loading = false;
+    state.overview.loaded = true;
     window.dashboardState.overview = overview;
     renderOverviewContent(overview);
   } catch (error) {
-    sections.overview.loading = false;
-    sections.overview.error = error;
+    state.overview.loading = false;
+    state.overview.error = error;
     renderOverviewError(error);
   }
 

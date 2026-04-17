@@ -11,13 +11,19 @@ test('buildSectionState returns the expected shell defaults', async () => {
   assert.equal(state.overview.expanded, true);
   assert.equal(state.users.loaded, false);
   assert.equal(state.feature.expanded, false);
-  assert.equal(state.features.expanded, false);
-  assert.equal(state.feature, state.features);
 
-  for (const sectionName of ['overview', 'users', 'network', 'system', 'records', 'features', 'settings']) {
+  for (const sectionName of ['overview', 'users', 'network', 'system', 'record', 'feature', 'settings']) {
     assert.ok(state[sectionName], `missing section state for ${sectionName}`);
     assert.equal(typeof state[sectionName].expanded, 'boolean');
     assert.equal(typeof state[sectionName].loaded, 'boolean');
     assert.equal(state[sectionName].error, null);
+  }
+
+  if (state.records) {
+    assert.equal(state.records, state.record);
+  }
+
+  if (state.features) {
+    assert.equal(state.features, state.feature);
   }
 });
