@@ -8,11 +8,9 @@ test('buildSectionState returns the expected shell defaults', async () => {
   const { buildSectionState } = await import(shellModuleUrl);
 
   const state = buildSectionState();
-  const expectedSectionNames = ['overview', 'users', 'network', 'system', 'record', 'feature', 'settings'];
+  const expectedSectionNames = ['overview'];
 
   assert.equal(state.overview.expanded, true);
-  assert.equal(state.users.loaded, false);
-  assert.equal(state.feature.expanded, false);
   assert.deepEqual(Object.keys(state), expectedSectionNames);
 
   for (const sectionName of expectedSectionNames) {
@@ -23,11 +21,8 @@ test('buildSectionState returns the expected shell defaults', async () => {
   }
 });
 
-test('registeredSections exposes all stage1 modules', async () => {
+test('registeredSections exposes only the homepage overview section', async () => {
   const { registeredSections } = await import(appModuleUrl);
 
-  assert.deepEqual(
-    [...registeredSections].sort(),
-    ['feature', 'network', 'overview', 'record', 'settings', 'system', 'users'].sort()
-  );
+  assert.deepEqual([...registeredSections], ['overview']);
 });

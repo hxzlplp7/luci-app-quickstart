@@ -1,40 +1,17 @@
 import { buildSectionState } from './shell.js';
 import { loadOverview } from './sections-overview.js';
-import { loadRecordSettings, runRecordAction, saveRecordSettings } from './sections-record.js';
-import { loadUserDetail, loadUsers, saveUserRemark } from './sections-users.js';
+import { loadUsers } from './sections-users.js';
 
-export const registeredSections = ['overview', 'users', 'network', 'system', 'record', 'feature', 'settings'];
+export const registeredSections = ['overview'];
 
-const SECTION_META = {
-  overview: {
-    title: 'Overview',
-    subtitle: 'Primary data source: /overview',
-  },
-  users: {
-    title: 'Users',
-    subtitle: 'Primary data source: /users',
-  },
-  network: {
-    title: 'Network',
-    subtitle: 'Waiting for module wiring',
-  },
-  system: {
-    title: 'System',
-    subtitle: 'Waiting for module wiring',
-  },
-  record: {
-    title: 'Record',
-    subtitle: 'Primary data source: /record/base',
-  },
-  feature: {
-    title: 'Feature',
-    subtitle: 'Waiting for module wiring',
-  },
-  settings: {
-    title: 'Settings',
-    subtitle: 'Waiting for module wiring',
-  },
+const EMPTY_USERS = {
+  page: 1,
+  page_size: 20,
+  total_num: 0,
+  list: [],
 };
+
+const DOMAIN_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -45,12 +22,8 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function formatNumber(value, suffix = '') {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return '-';
-  }
-
-  return `${value}${suffix}`;
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function formatBytes(value) {
@@ -67,33 +40,71 @@ function formatBytes(value) {
     index += 1;
   }
 
-  const precision = current >= 10 || index === 0 ? 0 : 1;
+  const precision = current >= 100 || index === 0 ? 0 : current >= 10 ? 1 : 2;
   return `${current.toFixed(precision)} ${units[index]}`;
 }
 
+function formatDuration(seconds) {
+  if (typeof seconds !== 'number' || Number.isNaN(seconds) || seconds < 0) {
+    return '-';
+  }
+
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (days > 0) {
+    return `${days}天 ${hours}小时`;
+  }
+
+  if (hours > 0) {
+    return `${hours}小时 ${minutes}分钟`;
+  }
+
+  return `${minutes}分钟`;
+}
+
+function formatPercent(value) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '-';
+  }
+
+  return `${Math.round(value)}%`;
+}
+
+function formatTemperature(value) {
+  if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) {
+    return '-';
+  }
+
+  return `${Math.round(value)}°C`;
+}
+
 function getUserDisplayName(user) {
-  return user.nickname || user.hostname || user.mac || '-';
+  return user.nickname || user.hostname || user.ip || user.mac || '未知终端';
 }
 
-function createUserDrawerState() {
-  return {
-    open: false,
-    mac: '',
-    loading: false,
-    saving: false,
-    detailError: null,
-    saveError: null,
-    detail: null,
-  };
+function getUserTrafficTotal(user) {
+  const traffic = user && user.traffic ? user.traffic : {};
+  return (Number(traffic.today_down_bytes) || 0) + (Number(traffic.today_up_bytes) || 0);
 }
 
-function createRecordPanelState() {
-  return {
-    saving: false,
-    clearing: false,
-    error: null,
-    notice: '',
-  };
+function buildDomainGradient(entries) {
+  if (!entries.length) {
+    return '';
+  }
+
+  const total = entries.reduce((sum, item) => sum + item.count, 0) || 1;
+  let progress = 0;
+
+  return entries
+    .map((item) => {
+      const start = (progress / total) * 360;
+      progress += item.count;
+      const end = (progress / total) * 360;
+      return `${item.color} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`;
+    })
+    .join(', ');
 }
 
 export function applySavedRemarkResult(dashboard, targetMac, targetValue) {
@@ -125,569 +136,494 @@ export function applySavedRemarkResult(dashboard, targetMac, targetValue) {
   return dashboard;
 }
 
-function renderSectionFrame(sectionName, bodyHtml, badgeHtml = '') {
-  const mount = document.querySelector(`[data-section="${sectionName}"]`);
+export function buildDashboardViewModel(overview, users = EMPTY_USERS) {
+  const userList = Array.isArray(users.list) ? [...users.list] : [];
+  const rankedUsers = userList
+    .map((user) => ({
+      ...user,
+      total_bytes: getUserTrafficTotal(user),
+    }))
+    .sort((left, right) => right.total_bytes - left.total_bytes)
+    .slice(0, 5);
+
+  const topDomains = (overview.domains && Array.isArray(overview.domains.top) ? overview.domains.top : [])
+    .map((entry, index) => ({
+      domain: String(entry.domain || 'unknown'),
+      count: Number(entry.count) || 0,
+      color: DOMAIN_COLORS[index % DOMAIN_COLORS.length],
+    }))
+    .filter((entry) => entry.count > 0)
+    .slice(0, 5);
+
+  const recentDomains = (
+    overview.domains && Array.isArray(overview.domains.recent) ? overview.domains.recent : []
+  )
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { domain: entry, count: 1 };
+      }
+
+      return {
+        domain: String(entry.domain || 'unknown'),
+        count: Number(entry.count) || 1,
+      };
+    })
+    .filter((entry) => entry.domain);
+
+  const activeDomains = (topDomains.length ? topDomains : recentDomains.slice(0, 8)).map((entry) => ({
+    domain: entry.domain,
+    count: entry.count,
+  }));
+
+  const capabilityItems = [
+    { label: '域名日志', enabled: Boolean(overview.capabilities.domain_logs) },
+    { label: '流量监控', enabled: Boolean(overview.capabilities.nlbwmon) },
+    { label: '特征库', enabled: Boolean(overview.capabilities.feature_library) },
+    { label: '历史存储', enabled: Boolean(overview.capabilities.history_store) },
+  ];
+
+  const totalUserDownload = rankedUsers.reduce(
+    (sum, user) => sum + (Number(user.traffic && user.traffic.today_down_bytes) || 0),
+    0
+  );
+  const totalUserUpload = rankedUsers.reduce(
+    (sum, user) => sum + (Number(user.traffic && user.traffic.today_up_bytes) || 0),
+    0
+  );
+
+  return {
+    hero: {
+      model: overview.system.model || '未知设备',
+      firmware: overview.system.firmware || '-',
+      uptime: formatDuration(overview.system.uptime_raw),
+      wanStatus: overview.network.wanStatus === 'up' ? '已联网' : '未联网',
+      wanOnline: overview.network.wanStatus === 'up',
+    },
+    metrics: [
+      {
+        label: '联网状态',
+        value: overview.network.wanStatus === 'up' ? '已联网' : '未联网',
+        tone: overview.network.wanStatus === 'up' ? 'positive' : 'warning',
+      },
+      {
+        label: '在线终端',
+        value: String(users.total_num || userList.length || overview.devices.length || 0),
+      },
+      {
+        label: '已识别设备',
+        value: String(overview.devices.length || 0),
+      },
+      {
+        label: '活跃域名',
+        value: String(activeDomains.length || 0),
+      },
+      {
+        label: '累计下行',
+        value: formatBytes(Number(overview.traffic.rx_bytes) || 0),
+      },
+      {
+        label: '累计上行',
+        value: formatBytes(Number(overview.traffic.tx_bytes) || 0),
+      },
+    ],
+    resourceMeters: [
+      {
+        label: 'CPU',
+        value: clamp(Number(overview.system.cpuUsage) || 0, 0, 100),
+        display: formatPercent(Number(overview.system.cpuUsage) || 0),
+        color: '#2563eb',
+      },
+      {
+        label: '内存',
+        value: clamp(Number(overview.system.memUsage) || 0, 0, 100),
+        display: formatPercent(Number(overview.system.memUsage) || 0),
+        color: '#10b981',
+      },
+      {
+        label: '温度',
+        value: clamp(Number(overview.system.temp) || 0, 0, 100),
+        display: formatTemperature(Number(overview.system.temp) || 0),
+        color: '#f59e0b',
+      },
+    ],
+    systemInfo: [
+      ['设备型号', overview.system.model || '-'],
+      ['固件版本', overview.system.firmware || '-'],
+      ['内核版本', overview.system.kernel || '-'],
+      ['运行时间', formatDuration(overview.system.uptime_raw)],
+    ],
+    networkInfo: [
+      ['LAN IP', overview.network.lanIp || '-'],
+      ['WAN IP', overview.network.wanIp || '-'],
+      ['DNS', overview.network.dns.length ? overview.network.dns.join(', ') : '-'],
+      ['域名源', overview.domains.source || 'none'],
+    ],
+    rankedUsers,
+    userTrafficSummary: {
+      download: formatBytes(totalUserDownload),
+      upload: formatBytes(totalUserUpload),
+    },
+    maxUserTraffic: rankedUsers.length ? rankedUsers[0].total_bytes || 1 : 1,
+    activeDomains,
+    recentDomains: recentDomains.slice(0, 6),
+    domainBreakdown: topDomains,
+    domainGradient: buildDomainGradient(topDomains),
+    capabilities: capabilityItems,
+  };
+}
+
+function renderLoading() {
+  const mount = document.querySelector('[data-section="overview"]');
   if (!mount) {
     return;
   }
 
-  const meta = SECTION_META[sectionName];
   mount.innerHTML = `
-    <div class="dashboard-panel-header">
-      <div>
-        <h2 class="dashboard-panel-title">${escapeHtml(meta.title)}</h2>
-        <p class="dashboard-panel-subtitle">${escapeHtml(meta.subtitle)}</p>
+    <div class="dashboard-home dashboard-home--loading">
+      <div class="dashboard-skeleton dashboard-skeleton--hero"></div>
+      <div class="dashboard-skeleton-grid">
+        <div class="dashboard-skeleton"></div>
+        <div class="dashboard-skeleton"></div>
+        <div class="dashboard-skeleton"></div>
+        <div class="dashboard-skeleton"></div>
       </div>
-      ${badgeHtml}
+      <div class="dashboard-skeleton-grid dashboard-skeleton-grid--main">
+        <div class="dashboard-skeleton dashboard-skeleton--panel"></div>
+        <div class="dashboard-skeleton dashboard-skeleton--panel"></div>
+      </div>
     </div>
-    <div class="dashboard-panel-body">${bodyHtml}</div>
   `;
 }
 
-function renderOverviewLoading() {
-  renderSectionFrame(
-    'overview',
-    '<p class="dashboard-note">Loading overview from <code>/overview</code>...</p>',
-    '<span class="dashboard-status-badge">Loading</span>'
-  );
-}
-
-function renderOverviewError(error) {
-  renderSectionFrame(
-    'overview',
-    `<p class="dashboard-note">Overview failed to load.</p><p class="dashboard-note is-muted">${escapeHtml(error.message || 'Unknown error')}</p>`,
-    '<span class="dashboard-status-badge is-error">Error</span>'
-  );
-}
-
-function renderOverviewContent(overview) {
-  const dnsMarkup = overview.network.dns.length
-    ? `<ul class="dashboard-list">${overview.network.dns.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
-    : '<p class="dashboard-note is-muted">No DNS servers reported.</p>';
-
-  renderSectionFrame(
-    'overview',
-    `
-      <div class="dashboard-overview-grid">
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">WAN</p>
-          <p class="dashboard-metric-value">${escapeHtml(overview.network.wanIp || '-')}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">LAN</p>
-          <p class="dashboard-metric-value">${escapeHtml(overview.network.lanIp || '-')}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Model</p>
-          <p class="dashboard-metric-value">${escapeHtml(overview.system.model || '-')}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Firmware</p>
-          <p class="dashboard-metric-value">${escapeHtml(overview.system.firmware || '-')}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">CPU</p>
-          <p class="dashboard-metric-value">${formatNumber(overview.system.cpuUsage, '%')}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Memory</p>
-          <p class="dashboard-metric-value">${formatNumber(overview.system.memUsage, '%')}</p>
-        </article>
-      </div>
-      <div class="dashboard-overview-grid" style="margin-top: 12px;">
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">DNS</p>
-          ${dnsMarkup}
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Traffic</p>
-          <p class="dashboard-metric-value">RX ${formatNumber(overview.traffic.rx_bytes)} / TX ${formatNumber(overview.traffic.tx_bytes)}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Devices</p>
-          <p class="dashboard-metric-value">${formatNumber(overview.devices.length)}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Capabilities</p>
-          <p class="dashboard-metric-value">${overview.capabilities.nlbwmon ? 'nlbwmon enabled' : 'nlbwmon unavailable'}</p>
-        </article>
-      </div>
-    `,
-    '<span class="dashboard-status-badge">Live</span>'
-  );
-}
-
-function renderPlaceholder(sectionName) {
-  renderSectionFrame(
-    sectionName,
-    '<p class="dashboard-note">Pending integration.</p><p class="dashboard-note is-muted">This section is scaffolded and ready for its dedicated module.</p>'
-  );
-}
-
-function renderRecordLoading() {
-  renderSectionFrame(
-    'record',
-    '<p class="dashboard-note">Loading record settings from <code>/record/base</code>...</p>',
-    '<span class="dashboard-status-badge">Loading</span>'
-  );
-}
-
-function renderRecordError(error) {
-  renderSectionFrame(
-    'record',
-    `<p class="dashboard-note">Record settings failed to load.</p><p class="dashboard-note is-muted">${escapeHtml(error.message || 'Unknown error')}</p>`,
-    '<span class="dashboard-status-badge is-error">Error</span>'
-  );
-}
-
-function readRecordDraft(mount) {
-  const readValue = (selector, fallback = '') => {
-    const element = mount.querySelector(selector);
-    return element ? element.value : fallback;
-  };
-
-  return {
-    enable: readValue('[name="enable"]', '0'),
-    record_time: readValue('[name="record_time"]'),
-    app_valid_time: readValue('[name="app_valid_time"]'),
-    history_data_size: readValue('[name="history_data_size"]'),
-    history_data_path: readValue('[name="history_data_path"]'),
-  };
-}
-
-function attachRecordEvents() {
-  const mount = document.querySelector('[data-section="record"]');
+function renderError(error) {
+  const mount = document.querySelector('[data-section="overview"]');
   if (!mount) {
     return;
   }
 
-  const form = mount.querySelector('[data-record-form]');
-  const clearButton = mount.querySelector('[data-record-clear]');
-
-  if (form) {
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-
-      const dashboard = window.dashboardState;
-      if (!dashboard || dashboard.recordPanel.saving || dashboard.recordPanel.clearing) {
-        return;
-      }
-
-      const draft = readRecordDraft(mount);
-      dashboard.record = draft;
-      dashboard.recordPanel = {
-        ...dashboard.recordPanel,
-        saving: true,
-        error: null,
-        notice: '',
-      };
-      renderRecordContent(dashboard.record);
-
-      try {
-        const saved = await saveRecordSettings(draft);
-        dashboard.record = saved;
-        dashboard.recordPanel.notice = 'Record settings saved.';
-      } catch (error) {
-        dashboard.recordPanel.error = error;
-      } finally {
-        dashboard.recordPanel.saving = false;
-        renderRecordContent(dashboard.record);
-      }
-    });
-  }
-
-  if (clearButton) {
-    clearButton.addEventListener('click', async () => {
-      const dashboard = window.dashboardState;
-      if (!dashboard || dashboard.recordPanel.saving || dashboard.recordPanel.clearing) {
-        return;
-      }
-
-      dashboard.recordPanel = {
-        ...dashboard.recordPanel,
-        clearing: true,
-        error: null,
-        notice: '',
-      };
-      renderRecordContent(dashboard.record);
-
-      try {
-        await runRecordAction('clear_history');
-        dashboard.recordPanel.notice = 'History data cleared.';
-      } catch (error) {
-        dashboard.recordPanel.error = error;
-      } finally {
-        dashboard.recordPanel.clearing = false;
-        renderRecordContent(dashboard.record);
-      }
-    });
-  }
+  mount.innerHTML = `
+    <div class="dashboard-home">
+      <section class="dashboard-error-card">
+        <p class="dashboard-eyebrow">Dashboard</p>
+        <h1 class="dashboard-error-title">首页数据加载失败</h1>
+        <p class="dashboard-error-copy">${escapeHtml(error.message || 'Unknown error')}</p>
+      </section>
+    </div>
+  `;
 }
 
-function renderRecordContent(recordSettings) {
-  const dashboard = window.dashboardState || {};
-  const record = recordSettings || dashboard.record || {
-    enable: '0',
-    record_time: '',
-    app_valid_time: '',
-    history_data_size: '',
-    history_data_path: '',
-  };
-  const panel = dashboard.recordPanel || createRecordPanelState();
-  const messageMarkup = panel.error
-    ? `<p class="dashboard-note is-muted" style="margin:0 0 12px;color:#b91c1c;">${escapeHtml(panel.error.message || 'Unknown error')}</p>`
-    : panel.notice
-      ? `<p class="dashboard-note" style="margin:0 0 12px;color:#166534;">${escapeHtml(panel.notice)}</p>`
-      : '';
-  const badgeLabel = panel.saving || panel.clearing ? 'Working' : 'Live';
+function renderMetrics(metrics) {
+  return metrics
+    .map(
+      (item) => `
+        <article class="dashboard-stat-card">
+          <p class="dashboard-stat-label">${escapeHtml(item.label)}</p>
+          <p class="dashboard-stat-value${item.tone ? ` is-${escapeHtml(item.tone)}` : ''}">${escapeHtml(item.value)}</p>
+        </article>
+      `
+    )
+    .join('');
+}
 
-  renderSectionFrame(
-    'record',
-    `
-      ${messageMarkup}
-      <form data-record-form>
-        <div class="dashboard-overview-grid">
-          <label class="dashboard-metric" for="dashboard-record-enable">
-            <span class="dashboard-metric-label">Enable</span>
-            <select id="dashboard-record-enable" name="enable" style="margin-top:8px;width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;box-sizing:border-box;">
-              <option value="0"${record.enable === '0' ? ' selected' : ''}>Disabled</option>
-              <option value="1"${record.enable === '1' ? ' selected' : ''}>Enabled</option>
-            </select>
-          </label>
-          <label class="dashboard-metric" for="dashboard-record-time">
-            <span class="dashboard-metric-label">Retention Days</span>
-            <input id="dashboard-record-time" name="record_time" type="number" min="1" max="30" value="${escapeHtml(record.record_time)}" style="margin-top:8px;width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;box-sizing:border-box;" />
-          </label>
-          <label class="dashboard-metric" for="dashboard-record-app-valid-time">
-            <span class="dashboard-metric-label">App Valid Days</span>
-            <input id="dashboard-record-app-valid-time" name="app_valid_time" type="number" min="1" max="30" value="${escapeHtml(record.app_valid_time)}" style="margin-top:8px;width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;box-sizing:border-box;" />
-          </label>
-          <label class="dashboard-metric" for="dashboard-record-size">
-            <span class="dashboard-metric-label">History Size</span>
-            <input id="dashboard-record-size" name="history_data_size" type="number" min="1" max="1024" value="${escapeHtml(record.history_data_size)}" style="margin-top:8px;width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;box-sizing:border-box;" />
-          </label>
+function renderResourceMeters(resourceMeters) {
+  return resourceMeters
+    .map(
+      (item) => `
+        <div class="dashboard-meter">
+          <div class="dashboard-meter-ring" style="--meter-value:${item.value};--meter-color:${item.color};">
+            <span>${escapeHtml(item.display)}</span>
+          </div>
+          <p>${escapeHtml(item.label)}</p>
         </div>
-        <label style="display:block;margin-top:12px;">
-          <span class="dashboard-metric-label">History Data Path</span>
-          <input name="history_data_path" type="text" value="${escapeHtml(record.history_data_path)}" style="margin-top:8px;width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;box-sizing:border-box;" />
-        </label>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap;">
-          <p class="dashboard-note is-muted" style="margin:0;">Only paths under <code>/tmp/dashboard/</code> are allowed.</p>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <button type="button" data-record-clear style="padding:10px 14px;border:1px solid #cbd5e1;border-radius:999px;background:#fff;cursor:pointer;"${panel.saving || panel.clearing ? ' disabled' : ''}>${panel.clearing ? 'Clearing...' : 'Clear History'}</button>
-            <button type="submit" style="padding:10px 14px;border:0;border-radius:999px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;"${panel.saving || panel.clearing ? ' disabled' : ''}>${panel.saving ? 'Saving...' : 'Save Settings'}</button>
+      `
+    )
+    .join('');
+}
+
+function renderKeyValueList(items) {
+  return items
+    .map(
+      ([label, value]) => `
+        <div class="dashboard-kv-row">
+          <dt>${escapeHtml(label)}</dt>
+          <dd>${escapeHtml(value)}</dd>
+        </div>
+      `
+    )
+    .join('');
+}
+
+function renderTrafficRanking(viewModel) {
+  if (!viewModel.rankedUsers.length) {
+    return '<p class="dashboard-empty-copy">暂无终端流量数据。</p>';
+  }
+
+  return viewModel.rankedUsers
+    .map((user, index) => {
+      const downBytes = Number(user.traffic && user.traffic.today_down_bytes) || 0;
+      const upBytes = Number(user.traffic && user.traffic.today_up_bytes) || 0;
+      const downWidth = clamp((downBytes / viewModel.maxUserTraffic) * 100, 8, 100);
+      const upWidth = upBytes > 0 ? clamp((upBytes / viewModel.maxUserTraffic) * 100, 4, 100) : 0;
+
+      return `
+        <div class="dashboard-traffic-row">
+          <div class="dashboard-traffic-rank">${index + 1}</div>
+          <div class="dashboard-traffic-main">
+            <div class="dashboard-traffic-head">
+              <strong>${escapeHtml(getUserDisplayName(user))}</strong>
+              <span>${escapeHtml(formatBytes(user.total_bytes))}</span>
+            </div>
+            <div class="dashboard-traffic-bars">
+              <div class="dashboard-traffic-bar">
+                <span class="dashboard-traffic-bar-fill is-down" style="width:${downWidth}%;"></span>
+              </div>
+              <div class="dashboard-traffic-bar">
+                <span class="dashboard-traffic-bar-fill is-up" style="width:${upWidth}%;"></span>
+              </div>
+            </div>
+            <div class="dashboard-traffic-meta">
+              <span>下行 ${escapeHtml(formatBytes(downBytes))}</span>
+              <span>上行 ${escapeHtml(formatBytes(upBytes))}</span>
+            </div>
           </div>
         </div>
-      </form>
-    `,
-    `<span class="dashboard-status-badge">${badgeLabel}</span>`
-  );
-
-  attachRecordEvents();
+      `;
+    })
+    .join('');
 }
 
-function renderUsersLoading() {
-  renderSectionFrame(
-    'users',
-    '<p class="dashboard-note">Loading users from <code>/users</code>...</p>',
-    '<span class="dashboard-status-badge">Loading</span>'
-  );
+function renderActiveDomains(viewModel) {
+  if (!viewModel.activeDomains.length) {
+    return '<p class="dashboard-empty-copy">暂无域名数据。</p>';
+  }
+
+  return viewModel.activeDomains
+    .map(
+      (item) => `
+        <span class="dashboard-chip">
+          <strong>${escapeHtml(item.domain)}</strong>
+          <em>${escapeHtml(String(item.count))}</em>
+        </span>
+      `
+    )
+    .join('');
 }
 
-function renderUsersError(error) {
-  renderSectionFrame(
-    'users',
-    `<p class="dashboard-note">Users failed to load.</p><p class="dashboard-note is-muted">${escapeHtml(error.message || 'Unknown error')}</p>`,
-    '<span class="dashboard-status-badge is-error">Error</span>'
-  );
-}
-
-function attachUserListEvents() {
-  const mount = document.querySelector('[data-section="users"]');
-  if (!mount) {
-    return;
-  }
-
-  const buttons = mount.querySelectorAll('[data-user-mac]');
-  for (const button of buttons) {
-    button.addEventListener('click', () => {
-      const mac = button.getAttribute('data-user-mac');
-      if (mac) {
-        openUserDrawer(mac);
-      }
-    });
-  }
-}
-
-function renderUsersContent(users) {
-  const rows = users.list.length
-    ? users.list
-        .map(
-          (user) => `
-            <button
-              type="button"
-              data-user-mac="${escapeHtml(user.mac)}"
-              style="display:flex;width:100%;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 0;border:0;border-bottom:1px solid #e2e8f0;background:transparent;text-align:left;cursor:pointer;"
-            >
-              <span style="display:block;min-width:0;">
-                <strong style="display:block;color:#0f172a;">${escapeHtml(getUserDisplayName(user))}</strong>
-                <span class="dashboard-note is-muted" style="display:block;margin-top:4px;">${escapeHtml(user.ip || 'No IP')} · ${escapeHtml(user.mac)}</span>
-              </span>
-              <span style="display:block;text-align:right;color:#475569;flex-shrink:0;">
-                <span style="display:block;">Down ${escapeHtml(formatBytes(user.traffic.today_down_bytes))}</span>
-                <span style="display:block;margin-top:4px;">Up ${escapeHtml(formatBytes(user.traffic.today_up_bytes))}</span>
-              </span>
-            </button>
-          `
-        )
-        .join('')
-    : '<p class="dashboard-note is-muted">No active users detected.</p>';
-
-  renderSectionFrame(
-    'users',
-    `
-      <div class="dashboard-overview-grid">
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Users</p>
-          <p class="dashboard-metric-value">${formatNumber(users.total_num)}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Page</p>
-          <p class="dashboard-metric-value">${formatNumber(users.page)}</p>
-        </article>
-      </div>
-      <div style="margin-top: 12px;">
-        ${rows}
-      </div>
-    `,
-    '<span class="dashboard-status-badge">Live</span>'
-  );
-
-  attachUserListEvents();
-}
-
-function ensureUserDrawerRoot() {
-  let root = document.getElementById('dashboard-user-drawer-root');
-  if (!root) {
-    root = document.createElement('div');
-    root.id = 'dashboard-user-drawer-root';
-    document.body.appendChild(root);
-  }
-
-  return root;
-}
-
-function attachUserDrawerEvents() {
-  const root = document.getElementById('dashboard-user-drawer-root');
-  if (!root) {
-    return;
-  }
-
-  const backdrop = root.querySelector('[data-drawer-backdrop]');
-  const closeButton = root.querySelector('[data-drawer-close]');
-  const saveButton = root.querySelector('[data-drawer-save]');
-
-  if (backdrop) {
-    backdrop.addEventListener('click', closeUserDrawer);
-  }
-
-  if (closeButton) {
-    closeButton.addEventListener('click', closeUserDrawer);
-  }
-
-  if (saveButton) {
-    saveButton.addEventListener('click', async () => {
-      const dashboard = window.dashboardState;
-      if (!dashboard || !dashboard.userDrawer.open || dashboard.userDrawer.saving) {
-        return;
-      }
-
-      const input = root.querySelector('[data-drawer-remark]');
-      const targetMac = dashboard.userDrawer.mac;
-      const targetValue = input ? input.value : '';
-
-      dashboard.userDrawer.saving = true;
-      dashboard.userDrawer.saveError = null;
-      renderUserDrawer();
-
-      try {
-        await saveUserRemark(targetMac, targetValue);
-        applySavedRemarkResult(dashboard, targetMac, targetValue);
-
-        if (dashboard.users) {
-          renderUsersContent(dashboard.users);
-        }
-      } catch (error) {
-        if (dashboard.userDrawer && dashboard.userDrawer.open && dashboard.userDrawer.mac === targetMac) {
-          dashboard.userDrawer.saveError = error;
-        }
-      } finally {
-        if (dashboard.userDrawer && dashboard.userDrawer.open && dashboard.userDrawer.mac === targetMac) {
-          dashboard.userDrawer.saving = false;
-          renderUserDrawer();
-        }
-      }
-    });
-  }
-}
-
-function renderUserDrawer() {
-  if (typeof document === 'undefined') {
-    return;
-  }
-
-  const dashboard = window.dashboardState;
-  const drawerState = dashboard && dashboard.userDrawer;
-  const root = ensureUserDrawerRoot();
-
-  if (!drawerState || !drawerState.open) {
-    root.innerHTML = '';
-    return;
-  }
-
-  let content = '<p class="dashboard-note">Loading user detail...</p>';
-
-  if (drawerState.detailError) {
-    content = `<p class="dashboard-note">Failed to load detail.</p><p class="dashboard-note is-muted">${escapeHtml(drawerState.detailError.message || 'Unknown error')}</p>`;
-  } else if (!drawerState.loading && drawerState.detail) {
-    const detail = drawerState.detail;
-    const device = detail.device;
-    const traffic = detail.traffic;
-    const saveErrorMarkup = drawerState.saveError
-      ? `<p class="dashboard-note is-muted" style="margin:12px 0 0;color:#b91c1c;">${escapeHtml(drawerState.saveError.message || 'Unknown error')}</p>`
-      : '';
-
-    content = `
-      <div class="dashboard-overview-grid">
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Display</p>
-          <p class="dashboard-metric-value">${escapeHtml(getUserDisplayName(device))}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">IP</p>
-          <p class="dashboard-metric-value">${escapeHtml(device.ip || '-')}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Down Today</p>
-          <p class="dashboard-metric-value">${escapeHtml(formatBytes(traffic.today_down_bytes))}</p>
-        </article>
-        <article class="dashboard-metric">
-          <p class="dashboard-metric-label">Up Today</p>
-          <p class="dashboard-metric-value">${escapeHtml(formatBytes(traffic.today_up_bytes))}</p>
-        </article>
-      </div>
-      <div style="margin-top:16px;">
-        <label class="dashboard-metric-label" for="dashboard-user-remark-input" style="display:block;margin-bottom:8px;">Remark</label>
-        <input
-          id="dashboard-user-remark-input"
-          data-drawer-remark
-          type="text"
-          value="${escapeHtml(device.nickname || '')}"
-          style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;box-sizing:border-box;"
-        />
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;">
-          <p class="dashboard-note is-muted" style="margin:0;">${escapeHtml(device.mac)}</p>
-          <button
-            type="button"
-            data-drawer-save
-            style="padding:10px 14px;border:0;border-radius:999px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;"
-          >
-            ${drawerState.saving ? 'Saving...' : 'Save Remark'}
-          </button>
-        </div>
-        ${saveErrorMarkup}
-      </div>
-      <div style="margin-top:16px;">
-        <p class="dashboard-metric-label">Recent Domains</p>
-        <p class="dashboard-note is-muted">${detail.recent_domains.length ? escapeHtml(detail.recent_domains.join(', ')) : 'No recent domain data yet.'}</p>
-        <p class="dashboard-metric-label" style="margin-top:12px;">History</p>
-        <p class="dashboard-note is-muted">${detail.history.length ? escapeHtml(detail.history.join(', ')) : 'No history data yet.'}</p>
+function renderDomainBreakdown(viewModel) {
+  if (!viewModel.domainBreakdown.length) {
+    return `
+      <div class="dashboard-domain-empty">
+        <div class="dashboard-domain-empty-ring"></div>
+        <p class="dashboard-empty-copy">当前没有可绘制的域名分布。</p>
       </div>
     `;
   }
 
-  root.innerHTML = `
-    <div data-drawer-backdrop style="position:fixed;inset:0;background:rgba(15,23,42,0.35);z-index:1000;"></div>
-    <aside style="position:fixed;top:0;right:0;height:100vh;width:min(420px,100vw);padding:24px;background:#ffffff;box-shadow:-12px 0 32px rgba(15,23,42,0.16);z-index:1001;overflow:auto;box-sizing:border-box;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-        <div>
-          <h2 class="dashboard-panel-title">User Detail</h2>
-          <p class="dashboard-panel-subtitle">${escapeHtml(drawerState.mac)}</p>
+  const legend = viewModel.domainBreakdown
+    .map(
+      (item) => `
+        <li>
+          <span class="dashboard-domain-dot" style="background:${item.color};"></span>
+          <strong>${escapeHtml(item.domain)}</strong>
+          <em>${escapeHtml(String(item.count))}</em>
+        </li>
+      `
+    )
+    .join('');
+
+  return `
+    <div class="dashboard-domain-grid">
+      <div class="dashboard-domain-ring" style="background:conic-gradient(${viewModel.domainGradient});">
+        <div class="dashboard-domain-center">
+          <span>${escapeHtml(String(viewModel.domainBreakdown.length))}</span>
+          <small>热点域名</small>
         </div>
-        <button
-          type="button"
-          data-drawer-close
-          style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:999px;background:#fff;cursor:pointer;"
-        >
-          Close
-        </button>
       </div>
-      <div style="margin-top:16px;">
-        ${content}
-      </div>
-    </aside>
+      <ul class="dashboard-domain-legend">${legend}</ul>
+    </div>
   `;
-
-  attachUserDrawerEvents();
 }
 
-function refreshIcons() {
-  if (window.lucide && typeof window.lucide.createIcons === 'function') {
-    window.lucide.createIcons();
+function renderRecentDomains(viewModel) {
+  if (!viewModel.recentDomains.length) {
+    return '<p class="dashboard-empty-copy">最近没有域名访问记录。</p>';
   }
+
+  return `
+    <ul class="dashboard-recent-list">
+      ${viewModel.recentDomains
+        .map(
+          (item) => `
+            <li>
+              <strong>${escapeHtml(item.domain)}</strong>
+              <span>${escapeHtml(String(item.count))} 次</span>
+            </li>
+          `
+        )
+        .join('')}
+    </ul>
+  `;
 }
 
-export async function openUserDrawer(mac) {
-  const dashboard = window.dashboardState;
-  if (!dashboard) {
+function renderCapabilities(viewModel) {
+  return `
+    <ul class="dashboard-capability-list">
+      ${viewModel.capabilities
+        .map(
+          (item) => `
+            <li class="${item.enabled ? 'is-enabled' : 'is-disabled'}">
+              <span>${escapeHtml(item.label)}</span>
+              <strong>${item.enabled ? '已启用' : '未启用'}</strong>
+            </li>
+          `
+        )
+        .join('')}
+    </ul>
+  `;
+}
+
+function renderOverviewContent(overview, users) {
+  const mount = document.querySelector('[data-section="overview"]');
+  if (!mount) {
     return;
   }
 
-  dashboard.userDrawer = {
-    ...dashboard.userDrawer,
-    open: true,
-    mac,
-    loading: true,
-    saving: false,
-    detailError: null,
-    saveError: null,
-    detail: null,
-  };
+  const viewModel = buildDashboardViewModel(overview, users);
 
-  renderUserDrawer();
+  mount.innerHTML = `
+    <div class="dashboard-home">
+      <section class="dashboard-hero-card">
+        <div>
+          <p class="dashboard-eyebrow">FanchmWrt Dashboard</p>
+          <h1 class="dashboard-hero-title">首页总览</h1>
+          <p class="dashboard-hero-copy">
+            当前设备为 <strong>${escapeHtml(viewModel.hero.model)}</strong>，
+            固件 <strong>${escapeHtml(viewModel.hero.firmware)}</strong>，
+            已运行 <strong>${escapeHtml(viewModel.hero.uptime)}</strong>。
+          </p>
+        </div>
+        <div class="dashboard-hero-side">
+          <span class="dashboard-live-pill${viewModel.hero.wanOnline ? '' : ' is-warning'}">${escapeHtml(
+            viewModel.hero.wanStatus
+          )}</span>
+          <div class="dashboard-hero-network">
+            <span>LAN ${escapeHtml(overview.network.lanIp || '-')}</span>
+            <span>WAN ${escapeHtml(overview.network.wanIp || '-')}</span>
+          </div>
+        </div>
+      </section>
 
-  try {
-    const detail = await loadUserDetail(mac);
-    if (!window.dashboardState.userDrawer.open || window.dashboardState.userDrawer.mac !== mac) {
-      return;
-    }
+      <section class="dashboard-stat-grid">
+        ${renderMetrics(viewModel.metrics)}
+      </section>
 
-    dashboard.userDrawer.detail = detail;
-  } catch (error) {
-    if (!window.dashboardState.userDrawer.open || window.dashboardState.userDrawer.mac !== mac) {
-      return;
-    }
+      <section class="dashboard-layout">
+        <div class="dashboard-main-column">
+          <article class="dashboard-card dashboard-card--feature">
+            <div class="dashboard-card-head">
+              <div>
+                <p class="dashboard-card-kicker">Flow Ranking</p>
+                <h2>终端流量排行</h2>
+              </div>
+              <div class="dashboard-card-summary">
+                <span>下行 ${escapeHtml(viewModel.userTrafficSummary.download)}</span>
+                <span>上行 ${escapeHtml(viewModel.userTrafficSummary.upload)}</span>
+              </div>
+            </div>
+            <div class="dashboard-traffic-legend">
+              <span><i class="is-down"></i>下行</span>
+              <span><i class="is-up"></i>上行</span>
+            </div>
+            <div class="dashboard-traffic-list">
+              ${renderTrafficRanking(viewModel)}
+            </div>
+          </article>
 
-    dashboard.userDrawer.detailError = error;
-  } finally {
-    if (window.dashboardState.userDrawer.mac === mac) {
-      dashboard.userDrawer.loading = false;
-      renderUserDrawer();
-    }
-  }
-}
+          <article class="dashboard-card">
+            <div class="dashboard-card-head">
+              <div>
+                <p class="dashboard-card-kicker">Live Domains</p>
+                <h2>活跃域名</h2>
+              </div>
+            </div>
+            <div class="dashboard-chip-row">
+              ${renderActiveDomains(viewModel)}
+            </div>
+          </article>
 
-export function closeUserDrawer() {
-  const dashboard = window.dashboardState;
-  if (!dashboard) {
-    return;
-  }
+          <div class="dashboard-bottom-grid">
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <div>
+                  <p class="dashboard-card-kicker">Domain Mix</p>
+                  <h2>域名分布</h2>
+                </div>
+              </div>
+              ${renderDomainBreakdown(viewModel)}
+            </article>
 
-  dashboard.userDrawer = {
-    ...createUserDrawerState(),
-  };
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <div>
+                  <p class="dashboard-card-kicker">Recent URLs</p>
+                  <h2>活跃 URL</h2>
+                </div>
+              </div>
+              ${renderRecentDomains(viewModel)}
+            </article>
+          </div>
+        </div>
 
-  renderUserDrawer();
+        <aside class="dashboard-side-column">
+          <article class="dashboard-card">
+            <div class="dashboard-card-head">
+              <div>
+                <p class="dashboard-card-kicker">System</p>
+                <h2>系统信息</h2>
+              </div>
+            </div>
+            <dl class="dashboard-kv-list">
+              ${renderKeyValueList(viewModel.systemInfo)}
+            </dl>
+          </article>
+
+          <article class="dashboard-card">
+            <div class="dashboard-card-head">
+              <div>
+                <p class="dashboard-card-kicker">Status</p>
+                <h2>运行状态</h2>
+              </div>
+            </div>
+            <div class="dashboard-meter-row">
+              ${renderResourceMeters(viewModel.resourceMeters)}
+            </div>
+          </article>
+
+          <article class="dashboard-card">
+            <div class="dashboard-card-head">
+              <div>
+                <p class="dashboard-card-kicker">Network</p>
+                <h2>网络信息</h2>
+              </div>
+            </div>
+            <dl class="dashboard-kv-list">
+              ${renderKeyValueList(viewModel.networkInfo)}
+            </dl>
+          </article>
+
+          <article class="dashboard-card">
+            <div class="dashboard-card-head">
+              <div>
+                <p class="dashboard-card-kicker">Capability</p>
+                <h2>监测能力</h2>
+              </div>
+            </div>
+            ${renderCapabilities(viewModel)}
+          </article>
+        </aside>
+      </section>
+    </div>
+  `;
 }
 
 export async function bootstrapDashboard() {
@@ -700,77 +636,25 @@ export async function bootstrapDashboard() {
     return;
   }
 
-  const state = buildSectionState();
   window.dashboardState = {
-    state,
+    state: buildSectionState(),
     overview: null,
-    record: null,
-    recordPanel: createRecordPanelState(),
-    users: null,
-    userDrawer: createUserDrawerState(),
+    users: EMPTY_USERS,
   };
 
-  for (const sectionName of registeredSections.filter(
-    (sectionName) => sectionName !== 'overview' && sectionName !== 'users' && sectionName !== 'record'
-  )) {
-    renderPlaceholder(sectionName);
+  renderLoading();
+
+  const [overviewResult, usersResult] = await Promise.allSettled([loadOverview(), loadUsers()]);
+  if (overviewResult.status !== 'fulfilled') {
+    renderError(overviewResult.reason);
+    return;
   }
 
-  renderOverviewLoading();
-  renderRecordLoading();
-  renderUsersLoading();
-  refreshIcons();
-
-  state.overview.loading = true;
-  state.record.loading = true;
-  state.users.loading = true;
-
-  const overviewTask = (async () => {
-    try {
-      const overview = await loadOverview();
-      state.overview.loaded = true;
-      window.dashboardState.overview = overview;
-      renderOverviewContent(overview);
-    } catch (error) {
-      state.overview.error = error;
-      renderOverviewError(error);
-    } finally {
-      state.overview.loading = false;
-      refreshIcons();
-    }
-  })();
-
-  const usersTask = (async () => {
-    try {
-      const users = await loadUsers();
-      state.users.loaded = true;
-      window.dashboardState.users = users;
-      renderUsersContent(users);
-    } catch (error) {
-      state.users.error = error;
-      renderUsersError(error);
-    } finally {
-      state.users.loading = false;
-      refreshIcons();
-    }
-  })();
-
-  const recordTask = (async () => {
-    try {
-      const record = await loadRecordSettings();
-      state.record.loaded = true;
-      window.dashboardState.record = record;
-      renderRecordContent(record);
-    } catch (error) {
-      state.record.error = error;
-      renderRecordError(error);
-    } finally {
-      state.record.loading = false;
-      refreshIcons();
-    }
-  })();
-
-  await Promise.allSettled([overviewTask, recordTask, usersTask]);
+  const overview = overviewResult.value;
+  const users = usersResult.status === 'fulfilled' ? usersResult.value : EMPTY_USERS;
+  window.dashboardState.overview = overview;
+  window.dashboardState.users = users;
+  renderOverviewContent(overview, users);
 }
 
 bootstrapDashboard();

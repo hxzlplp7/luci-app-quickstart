@@ -10,11 +10,5 @@ function createSectionState(expanded) {
 export function buildSectionState() {
   return {
     overview: createSectionState(true),
-    users: createSectionState(false),
-    network: createSectionState(false),
-    system: createSectionState(false),
-    record: createSectionState(false),
-    feature: createSectionState(false),
-    settings: createSectionState(false),
   };
 }

@@ -1,8 +1,5 @@
 <%+header%>
 <link rel="stylesheet" href="/luci-static/dashboard/app.css" />
-<script src="/luci-static/dashboard/tailwindcss.js"></script>
-<script src="/luci-static/dashboard/lucide.js"></script>
-<script src="/luci-static/dashboard/echarts.js"></script>
 
 <div class="dashboard-page">
     <main class="dashboard-shell">
@@ -13,13 +10,7 @@
             data-session-token="<%=session_token or ""%>"
             aria-live="polite"
         >
-            <section class="dashboard-panel" data-section="overview"></section>
-            <section class="dashboard-panel" data-section="users"></section>
-            <section class="dashboard-panel" data-section="network"></section>
-            <section class="dashboard-panel" data-section="system"></section>
-            <section class="dashboard-panel" data-section="record"></section>
-            <section class="dashboard-panel" data-section="feature"></section>
-            <section class="dashboard-panel" data-section="settings"></section>
+            <section class="dashboard-home-section" data-section="overview"></section>
         </div>
     </main>
 </div>
