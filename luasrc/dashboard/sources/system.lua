@@ -2,6 +2,15 @@ local util = require("luci.util")
 
 local M = {}
 
+local function path_exists(path)
+  local f = io.open(path, "r")
+  if f then
+    f:close()
+    return true
+  end
+  return false
+end
+
 local function read_line(path)
   local f = io.open(path, "r")
   if not f then
@@ -95,7 +104,8 @@ function M.read()
     cpuUsage = math.min(100, math.floor(load1 * 100 / cpus)),
     memUsage = math.floor((mem_total - mem_available) * 100 / mem_total),
     temp = temp,
-    systime_raw = os.time()
+    systime_raw = os.time(),
+    hasSamba4 = path_exists("/usr/lib/lua/luci/controller/samba4.lua") or path_exists("/etc/config/samba4")
   }
 end
 
