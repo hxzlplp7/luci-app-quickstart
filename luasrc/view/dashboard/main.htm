@@ -1,391 +1,712 @@
 <%+header%>
-<!-- 使用本地资源实现 100% 离线 -->
 <script src="/luci-static/dashboard/tailwindcss.js"></script>
 <script src="/luci-static/dashboard/chart.js"></script>
 <script src="/luci-static/dashboard/lucide.js"></script>
 
 <style>
-    /* 继承用户提供的深色皮肤滚动条与基础样式 */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #1e1e24; }
     ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #52525b; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
     .chart-center-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
 </style>
 
 <script>
-    // 注入用户提供的 Tailwind 配置
     window.tailwind.config = {
         theme: {
             extend: {
                 colors: {
-                    bgBase: '#1c1d21', bgPanel: '#24252b', bgHover: '#2d2e34',
-                    textMain: '#d1d5db', textMuted: '#9ca3af', borderMain: '#374151',
-                    accentGreen: '#10b981', accentBlue: '#3b82f6', accentPurple: '#8b5cf6',
-                    accentOrange: '#f97316', accentCyan: '#06b6d4'
+                    bgBase: '#1c1d21',
+                    bgPanel: '#24252b',
+                    bgHover: '#2d2e34',
+                    textMain: '#d1d5db',
+                    textMuted: '#9ca3af',
+                    borderMain: '#4b5563',
+                    accentGreen: '#10b981',
+                    accentBlue: '#3b82f6',
+                    accentPurple: '#8b5cf6',
+                    accentOrange: '#f97316',
+                    accentCyan: '#06b6d4',
+                    accentRose: '#f43f5e'
                 },
-                fontSize: { 'xxs': '0.65rem' }
+                fontSize: {
+                    xxs: '0.65rem'
+                }
             }
         }
-    }
+    };
 </script>
 
-<div class="bg-bgBase text-textMain min-h-[calc(100vh-120px)] flex flex-col p-4 rounded-xl overflow-y-auto">
-    <!-- 头部面包屑 -->
+<div class="bg-bgBase text-textMain min-h-[calc(100vh-120px)] rounded-xl p-4 overflow-y-auto">
     <div class="flex items-center gap-2 text-xs text-textMuted mb-4">
         <i data-lucide="home" class="w-3 h-3"></i>
-        <span>></span>
+        <span>&gt;</span>
         <span>仪表板</span>
     </div>
 
-    <!-- 主布局网格 -->
-    <div class="flex flex-col lg:flex-row gap-4">
-        
-        <!-- 左侧/中间 主内容区 -->
-        <div class="flex-1 flex flex-col gap-4 min-w-0">
-            
-            <!-- 指标行 -->
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
-                    <div class="text-xs text-textMuted mb-1">联网状态</div>
-                    <div class="text-accentGreen font-semibold text-sm" id="wan-status-text">检测中...</div>
+    <div class="flex flex-col xl:flex-row gap-4">
+        <div class="flex-1 min-w-0 flex flex-col gap-4">
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                    <div class="text-xs text-textMuted mb-2">联网状态</div>
+                    <div class="text-lg font-semibold text-accentGreen" id="wan-status-text">Checking...</div>
                 </div>
-                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
-                    <div class="text-xs text-textMuted mb-1">在线设备</div>
-                    <div class="text-gray-200 font-semibold text-xl" id="active-device-count">0</div>
+                <div class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                    <div class="text-xs text-textMuted mb-2">在线设备</div>
+                    <div class="text-2xl font-semibold text-gray-100" id="active-device-count">0</div>
                 </div>
-                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
-                    <div class="text-xs text-textMuted mb-1">连接数</div>
-                    <div class="text-gray-200 font-semibold text-xl" id="conn-count">-</div>
+                <div class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                    <div class="text-xs text-textMuted mb-2">连接数</div>
+                    <div class="text-2xl font-semibold text-gray-100" id="conn-count">-</div>
                 </div>
-                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
-                    <div class="text-xs text-textMuted mb-1">今日下载</div>
-                    <div class="text-gray-200 font-semibold text-sm truncate" id="total-down">-</div>
+                <div class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                    <div class="text-xs text-textMuted mb-2">累计下载</div>
+                    <div class="text-lg font-semibold text-gray-100 truncate" id="total-down">-</div>
                 </div>
-                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
-                    <div class="text-xs text-textMuted mb-1">今日上传</div>
-                    <div class="text-gray-200 font-semibold text-sm truncate" id="total-up">-</div>
+                <div class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                    <div class="text-xs text-textMuted mb-2">累计上传</div>
+                    <div class="text-lg font-semibold text-gray-100 truncate" id="total-up">-</div>
                 </div>
             </div>
 
-            <!-- 流量统计图表 -->
-            <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-sm font-medium text-gray-200 flex items-center gap-2">
+            <section class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-medium text-gray-100 flex items-center gap-2">
                         <i data-lucide="activity" class="w-4 h-4 text-accentGreen"></i>
-                        流量统计(wan)
+                        流量统计（WAN）
                     </h3>
                 </div>
-                <div class="h-64 w-full relative">
+                <div class="h-64">
                     <canvas id="trafficChart"></canvas>
                 </div>
-                <div class="flex justify-center gap-6 mt-4 text-[10px] text-textMuted font-mono">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accentGreen"></span> 下行: <span id="cur-down-speed">0 KB/s</span></span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accentBlue"></span> 上行: <span id="cur-up-speed">0 KB/s</span></span>
+                <div class="flex justify-center gap-6 mt-4 text-[11px] text-textMuted font-mono">
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accentGreen"></span>Down <span id="cur-down-speed">0 B/s</span></span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accentBlue"></span>Up <span id="cur-up-speed">0 B/s</span></span>
                 </div>
-            </div>
+            </section>
 
-            <!-- OAF 活跃应用与特征库更新 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-bgPanel rounded p-4 border border-borderMain">
-                    <h3 class="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <section class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                    <h3 class="text-sm font-medium text-gray-100 mb-4 flex items-center gap-2">
                         <i data-lucide="layout-grid" class="w-4 h-4 text-accentPurple"></i>
-                        活跃APP
+                        活跃 APP
                     </h3>
-                    <div class="flex flex-wrap gap-x-6 gap-y-4" id="oaf-apps-list">
-                        <!-- Mock Apps for Visuals -->
-                        <div class="flex flex-col items-center gap-1 w-10">
-                            <div class="w-8 h-8 rounded bg-green-500 flex items-center justify-center text-white"><i data-lucide="play" class="w-4 h-4"></i></div>
-                            <span class="text-xxs text-textMuted truncate w-full text-center">视频</span>
-                        </div>
-                        <div class="flex flex-col items-center gap-1 w-10">
-                            <div class="w-8 h-8 rounded bg-blue-500 flex items-center justify-center text-white"><i data-lucide="message-square" class="w-4 h-4"></i></div>
-                            <span class="text-xxs text-textMuted truncate w-full text-center">社交</span>
-                        </div>
+                    <div id="oaf-apps-list" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div class="col-span-full text-xs text-textMuted">Loading OAF data...</div>
                     </div>
-                </div>
+                </section>
 
-                <!-- OAF 特征库更新 -->
-                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col">
-                    <h3 class="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+                <section class="bg-bgPanel border border-borderMain rounded-xl p-4 flex flex-col">
+                    <h3 class="text-sm font-medium text-gray-100 mb-4 flex items-center gap-2">
                         <i data-lucide="shield-check" class="w-4 h-4 text-accentOrange"></i>
                         OAF 特征库
                     </h3>
                     <div class="space-y-2 text-xs mb-4">
-                        <div class="flex justify-between"><span class="text-textMuted">版本</span><span class="text-gray-300" id="oaf-version">-</span></div>
-                        <div class="flex justify-between"><span class="text-textMuted">引擎</span><span class="text-gray-300" id="oaf-engine">-</span></div>
+                        <div class="flex justify-between gap-4"><span class="text-textMuted">版本</span><span class="text-gray-100 font-mono text-right" id="oaf-version">-</span></div>
+                        <div class="flex justify-between gap-4"><span class="text-textMuted">引擎</span><span class="text-gray-100 font-mono text-right" id="oaf-engine">-</span></div>
                     </div>
                     <div class="mt-auto space-y-3">
                         <label class="block">
-                            <input type="file" title="选择特征库文件" id="oaf-file-input" class="block w-full text-[10px] text-textMuted
-                              file:mr-2 file:py-1 file:px-3
-                              file:rounded-full file:border-0
-                              file:text-xxs file:font-semibold
-                              file:bg-bgHover file:text-accentOrange
-                              cursor-pointer
-                            "/>
+                            <input id="oaf-file-input" type="file" accept=".bin,.zip,.tgz,.tar.gz" title="Select feature file" class="block w-full text-[10px] text-textMuted
+                                file:mr-2 file:py-1.5 file:px-3
+                                file:rounded-full file:border-0
+                                file:text-xxs file:font-semibold
+                                file:bg-bgHover file:text-accentOrange
+                                cursor-pointer" />
                         </label>
-                        <button id="oaf-upload-btn" onclick="uploadOafFeature()" class="w-full py-1.5 bg-accentOrange hover:bg-orange-600 text-white text-xs rounded transition-colors flex items-center justify-center gap-2">
-                            <i data-lucide="upload" class="w-3 h-3"></i> 立即更新
+                        <div class="text-[10px] text-textMuted">Supports the official zip package or an extracted .bin bundle.</div>
+                        <button id="oaf-upload-btn" onclick="uploadOafFeature()" class="w-full py-2 bg-accentOrange hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors flex items-center justify-center gap-2">
+                            <i data-lucide="upload" class="w-3 h-3"></i>
+                            立即更新
                         </button>
                         <div id="oaf-progress-container" class="hidden">
-                            <div class="w-full bg-bgBase h-1 rounded overflow-hidden">
+                            <div class="w-full bg-bgBase h-1.5 rounded overflow-hidden">
                                 <div id="oaf-bar" class="bg-accentBlue h-full w-0 transition-all duration-300"></div>
                             </div>
                         </div>
+                        <div id="oaf-upload-status" class="text-[10px] text-textMuted"></div>
                     </div>
-                </div>
+                </section>
             </div>
 
-            <!-- 分布图表排 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col h-64">
-                    <h3 class="text-sm font-medium text-gray-200 mb-2">APP 统计分布</h3>
-                    <div class="flex-1 relative">
-                        <canvas id="appUsageChart"></canvas>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <section class="bg-bgPanel border border-borderMain rounded-xl p-4 flex flex-col h-72">
+                    <h3 class="text-sm font-medium text-gray-100 mb-2">APP 统计分布</h3>
+                    <div class="flex-1 min-h-0 flex items-center justify-center">
+                        <div class="w-full max-w-[240px] h-[200px] relative">
+                            <canvas id="appUsageChart"></canvas>
+                        </div>
                     </div>
-                </div>
-                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col h-64">
-                    <h3 class="text-sm font-medium text-gray-200 mb-2">活跃域名</h3>
-                    <div class="flex-1 overflow-y-auto space-y-2" id="domains-list">
-                    </div>
-                </div>
-            </div>
+                </section>
 
+                <section class="bg-bgPanel border border-borderMain rounded-xl p-4 flex flex-col h-72">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-sm font-medium text-gray-100">活跃域名</h3>
+                        <span id="domains-source" class="text-[10px] text-textMuted">-</span>
+                    </div>
+                    <div id="domains-list" class="flex-1 overflow-y-auto space-y-2">
+                        <div class="text-xs text-textMuted">Loading domain data...</div>
+                    </div>
+                </section>
+            </div>
         </div>
 
-        <!-- 右侧 系统面板区 -->
-        <div class="w-full lg:w-72 flex flex-col gap-4 shrink-0">
-            
-            <!-- 系统信息 -->
-            <div class="bg-bgPanel rounded p-4 border border-borderMain">
-                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">系统信息</h3>
+        <aside class="w-full xl:w-80 flex flex-col gap-4 shrink-0">
+            <section class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                <h3 class="text-sm font-medium text-gray-100 mb-3 border-b border-borderMain pb-2">系统信息</h3>
                 <div class="space-y-2 text-xs">
-                    <div class="flex justify-between"><span class="text-textMuted">主机名</span><span class="text-gray-300" id="sys-hostname">-</span></div>
-                    <div class="flex justify-between"><span class="text-textMuted">设备型号</span><span class="text-gray-300" id="sys-model">-</span></div>
-                    <div class="flex justify-between"><span class="text-textMuted">固件版本</span><span class="text-gray-300 font-mono" id="sys-firmware">-</span></div>
-                    <div class="flex justify-between"><span class="text-textMuted">内核版本</span><span class="text-gray-300 font-mono" id="sys-kernel">-</span></div>
-                    <div class="flex justify-between"><span class="text-textMuted">运行时间</span><span class="text-gray-300" id="sys-uptime">-</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-textMuted">主机名</span><span class="text-gray-100 text-right" id="sys-hostname">-</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-textMuted">设备型号</span><span class="text-gray-100 text-right" id="sys-model">-</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-textMuted">固件版本</span><span class="text-gray-100 text-right font-mono" id="sys-firmware">-</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-textMuted">内核版本</span><span class="text-gray-100 text-right font-mono" id="sys-kernel">-</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-textMuted">运行时间</span><span class="text-gray-100 text-right" id="sys-uptime">-</span></div>
                 </div>
-            </div>
+            </section>
 
-            <!-- 运行状态 Dials -->
-            <div class="bg-bgPanel rounded p-4 border border-borderMain">
-                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">运行状态</h3>
+            <section class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                <h3 class="text-sm font-medium text-gray-100 mb-3 border-b border-borderMain pb-2">运行状态</h3>
                 <div class="flex justify-around items-center pt-2">
-                    <div class="relative w-16 h-16">
+                    <div class="relative w-20 h-20">
                         <canvas id="cpuDial"></canvas>
-                        <div class="chart-center-text text-[10px] text-gray-200" id="cpu-text">0%</div>
+                        <div class="chart-center-text text-[11px] text-gray-100" id="cpu-text">0%</div>
                         <div class="text-center text-xxs text-textMuted mt-1 absolute -bottom-5 w-full">CPU</div>
                     </div>
-                    <div class="relative w-16 h-16">
+                    <div class="relative w-20 h-20">
                         <canvas id="memDial"></canvas>
-                        <div class="chart-center-text text-[10px] text-gray-200" id="mem-text">0%</div>
-                        <div class="text-center text-xxs text-textMuted mt-1 absolute -bottom-5 w-full">内存</div>
+                        <div class="chart-center-text text-[11px] text-gray-100" id="mem-text">0%</div>
+                        <div class="text-center text-xxs text-textMuted mt-1 absolute -bottom-5 w-full">MEM</div>
                     </div>
                 </div>
                 <div class="h-6"></div>
-            </div>
+            </section>
 
-            <!-- 温度 -->
-            <div class="bg-bgPanel rounded p-4 border border-borderMain">
-                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">温度</h3>
-                <div class="flex items-center justify-between text-xs mb-1">
+            <section class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                <h3 class="text-sm font-medium text-gray-100 mb-3 border-b border-borderMain pb-2">温度</h3>
+                <div class="flex items-center justify-between text-xs mb-2">
                     <span class="text-textMuted">CPU</span>
-                    <span class="text-gray-300" id="cpu-temp">-</span>
+                    <span class="text-gray-100" id="cpu-temp">-</span>
                 </div>
-                <div class="w-full bg-bgBase rounded-full h-1 border border-borderMain overflow-hidden">
-                    <div id="temp-bar" class="bg-accentOrange h-full transition-all duration-500 w-0"></div>
+                <div class="w-full bg-bgBase rounded-full h-1.5 overflow-hidden">
+                    <div id="temp-bar" class="bg-accentOrange h-full w-0 transition-all duration-500"></div>
                 </div>
-            </div>
+            </section>
 
-            <!-- 网络面板 -->
-            <div class="bg-bgPanel rounded p-4 border border-borderMain">
-                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">网络</h3>
+            <section class="bg-bgPanel border border-borderMain rounded-xl p-4">
+                <h3 class="text-sm font-medium text-gray-100 mb-3 border-b border-borderMain pb-2">网络</h3>
                 <div class="space-y-2 text-xs">
-                    <div class="flex justify-between"><span class="text-textMuted">LAN IP</span><span class="text-gray-300" id="lan-ip">-</span></div>
-                    <div class="flex justify-between"><span class="text-textMuted">WAN IP</span><span class="text-gray-300" id="wan-ip">-</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-textMuted">LAN IP</span><span class="text-gray-100 font-mono text-right" id="lan-ip">-</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-textMuted">WAN IP</span><span class="text-gray-100 font-mono text-right" id="wan-ip">-</span></div>
                 </div>
-            </div>
+            </section>
 
-            <!-- 在线设备简表 -->
-            <div class="bg-bgPanel rounded p-4 border border-borderMain flex-1">
-                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">在线设备</h3>
-                <div class="space-y-2 overflow-y-auto max-h-48" id="devices-list">
+            <section class="bg-bgPanel border border-borderMain rounded-xl p-4 flex-1">
+                <h3 class="text-sm font-medium text-gray-100 mb-3 border-b border-borderMain pb-2">在线设备</h3>
+                <div id="devices-list" class="space-y-2 overflow-y-auto max-h-72">
+                    <div class="text-xs text-textMuted">Loading device list...</div>
                 </div>
-            </div>
-
-        </div>
+            </section>
+        </aside>
     </div>
 </div>
 
 <script>
     const API_BASE = '<%=url("admin/dashboard/api")%>';
     const API_OAF = '/cgi-bin/luci/api/oaf';
+    const APP_COLORS = ['#10b981', '#8b5cf6', '#3b82f6', '#f97316', '#06b6d4', '#f43f5e'];
+    const MAX_TRAFFIC_POINTS = 40;
+    const trafficState = {
+        labels: Array(MAX_TRAFFIC_POINTS).fill(''),
+        upload: Array(MAX_TRAFFIC_POINTS).fill(0),
+        download: Array(MAX_TRAFFIC_POINTS).fill(0),
+        previousTx: 0,
+        previousRx: 0,
+        previousAt: 0
+    };
 
-    // 格式化与基础工具
-    const formatBytes = (bytes) => {
-        if (!bytes || bytes === 0) return '0 B';
-        const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-    const formatUptime = (s) => {
-        if (!s) return '-';
-        const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
-        return `${d > 0 ? d + 'd ' : ''}${h}h ${m}m`;
-    };
-    async function apiRequest(ep, base = API_BASE) {
-        try { const res = await fetch(`${base}/${ep}`, { credentials: 'same-origin' }); return res.ok ? await res.json() : null; } catch (e) { return null; }
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
-    // Chart.js 全局配置
+    function formatBytes(bytes) {
+        const value = Number(bytes) || 0;
+        if (value <= 0) {
+            return '0 B';
+        }
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+        return `${(value / (1024 ** index)).toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
+    }
+
+    function formatNumber(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+            return '-';
+        }
+        return new Intl.NumberFormat('zh-CN').format(number);
+    }
+
+    function formatUptime(seconds) {
+        const total = Number(seconds) || 0;
+        if (total <= 0) {
+            return '-';
+        }
+        const days = Math.floor(total / 86400);
+        const hours = Math.floor((total % 86400) / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        return `${days > 0 ? `${days}d ` : ''}${hours}h ${minutes}m`;
+    }
+
+    function formatLastSeen(seconds) {
+        const total = Number(seconds);
+        if (!Number.isFinite(total) || total < 60) {
+            return 'just now';
+        }
+        if (total < 3600) {
+            return `${Math.floor(total / 60)} min ago`;
+        }
+        if (total < 86400) {
+            return `${Math.floor(total / 3600)} h ago`;
+        }
+        return `${Math.floor(total / 86400)} d ago`;
+    }
+
+    function domainSourceLabel(source) {
+        const labels = {
+            openclash: 'OpenClash',
+            passwall: 'PassWall',
+            passwall2: 'PassWall2',
+            homeproxy: 'HomeProxy',
+            mihomo: 'Mihomo',
+            'sing-box': 'Sing-Box',
+            direct: 'Direct DNS',
+            none: 'No data'
+        };
+        return labels[source] || source || 'No data';
+    }
+
+    async function apiRequest(endpoint, base = API_BASE, options = {}) {
+        try {
+            const response = await fetch(`${base}/${endpoint}`, {
+                credentials: 'same-origin',
+                ...options
+            });
+            if (!response.ok) {
+                return null;
+            }
+            return await response.json();
+        } catch (_) {
+            return null;
+        }
+    }
+
     Chart.defaults.color = '#9ca3af';
     Chart.defaults.borderColor = '#374151';
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
 
-    // 1. 流量图表
-    const trafficCtx = document.getElementById('trafficChart').getContext('2d');
-    const MAX_POINTS = 40;
-    let trafficLabels = Array(MAX_POINTS).fill('');
-    let dataDown = Array(MAX_POINTS).fill(0);
-    let dataUp = Array(MAX_POINTS).fill(0);
-
-    const trafficChart = new Chart(trafficCtx, {
+    const trafficChart = new Chart(document.getElementById('trafficChart').getContext('2d'), {
         type: 'line',
         data: {
-            labels: trafficLabels,
+            labels: trafficState.labels,
             datasets: [
-                { label: '下行', data: dataDown, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 },
-                { label: '上行', data: dataUp, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }
+                {
+                    label: 'Download',
+                    data: trafficState.download,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 0,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Upload',
+                    data: trafficState.upload,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.10)',
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 0,
+                    borderWidth: 2
+                }
             ]
         },
         options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { display: false }, y: { grid: { color: '#2d2e34' }, ticks: { font: { size: 10 } } } },
-            animation: false
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    intersect: false,
+                    mode: 'index',
+                    callbacks: {
+                        label(context) {
+                            return `${context.dataset.label}: ${formatBytes(context.raw)}/s`;
+                        }
+                    }
+                }
+            },
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { display: false }
+                },
+                y: {
+                    grid: { color: '#2d2e34' },
+                    ticks: {
+                        callback(value) {
+                            return formatBytes(value);
+                        }
+                    }
+                }
+            }
         }
     });
 
-    let prevTx = 0, prevRx = 0, prevTime = 0;
-    async function refreshTraffic() {
-        const data = await apiRequest('traffic');
-        if (data) {
-            const now = Date.now();
-            if (prevTime !== 0) {
-                const diff = (now - prevTime) / 1000;
-                const upSpeed = (data.tx_bytes - prevTx) / diff;
-                const downSpeed = (data.rx_bytes - prevRx) / diff;
-                dataUp.push(upSpeed); dataDown.push(downSpeed);
-                dataUp.shift(); dataDown.shift();
-                trafficChart.update();
-                document.getElementById('cur-up-speed').innerText = formatBytes(upSpeed) + '/s';
-                document.getElementById('cur-down-speed').innerText = formatBytes(downSpeed) + '/s';
+    const cpuDial = new Chart(document.getElementById('cpuDial').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: ['#10b981', '#2d2e34'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '82%',
+            plugins: {
+                tooltip: { enabled: false },
+                legend: { display: false }
             }
-            document.getElementById('total-up').innerText = formatBytes(data.tx_bytes);
-            document.getElementById('total-down').innerText = formatBytes(data.rx_bytes);
-            prevTx = data.tx_bytes; prevRx = data.rx_bytes; prevTime = now;
         }
+    });
+
+    const memDial = new Chart(document.getElementById('memDial').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: ['#3b82f6', '#2d2e34'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '82%',
+            plugins: {
+                tooltip: { enabled: false },
+                legend: { display: false }
+            }
+        }
+    });
+
+    const appUsageChart = new Chart(document.getElementById('appUsageChart').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: ['No data'],
+            datasets: [{
+                data: [1],
+                backgroundColor: ['#4b5563'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '74%',
+            layout: { padding: 8 },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 9,
+                        boxHeight: 9,
+                        padding: 12,
+                        font: { size: 10 }
+                    }
+                }
+            }
+        }
+    });
+
+    function setUploadStatus(message, tone = 'muted') {
+        const node = document.getElementById('oaf-upload-status');
+        const colors = {
+            muted: 'text-textMuted',
+            success: 'text-accentGreen',
+            error: 'text-accentOrange'
+        };
+        node.className = `text-[10px] ${colors[tone] || colors.muted}`;
+        node.textContent = message || '';
     }
 
-    // 2. Dials (CPU/Mem)
-    const cpuDial = new Chart(document.getElementById('cpuDial').getContext('2d'), {
-        type: 'doughnut', data: { datasets: [{ data: [0, 100], backgroundColor: ['#10b981', '#2d2e34'], borderWidth: 0 }] },
-        options: { responsive: true, cutout: '85%', plugins: { tooltip: false } }
-    });
-    const memDial = new Chart(document.getElementById('memDial').getContext('2d'), {
-        type: 'doughnut', data: { datasets: [{ data: [0, 100], backgroundColor: ['#3b82f6', '#2d2e34'], borderWidth: 0 }] },
-        options: { responsive: true, cutout: '85%', plugins: { tooltip: false } }
-    });
+    function renderActiveApps(apps) {
+        const container = document.getElementById('oaf-apps-list');
+        if (!Array.isArray(apps) || apps.length === 0) {
+            container.innerHTML = '<div class="col-span-full text-xs text-textMuted">No active app data.</div>';
+            return;
+        }
 
-    // 3. App Usage / Distribution
-    const appUsageChart = new Chart(document.getElementById('appUsageChart').getContext('2d'), {
-        type: 'doughnut', data: { labels: ['视频', '下载', '聊天', '购物'], datasets: [{ data: [40, 30, 20, 10], backgroundColor: ['#10b981','#8b5cf6','#3b82f6','#f97316'], borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } } }
-    });
+        container.innerHTML = apps.map((item) => `
+            <div class="rounded-lg bg-bgHover/70 border border-borderMain/60 p-3 flex items-center gap-3 min-w-0">
+                <img src="${escapeHtml(item.icon || '/luci-static/resources/app_icons/default.png')}" alt="${escapeHtml(item.name || 'APP')}" class="w-9 h-9 rounded-lg shrink-0 bg-bgBase object-cover" />
+                <div class="min-w-0">
+                    <div class="text-xs text-gray-100 truncate">${escapeHtml(item.name || '-')}</div>
+                    <div class="text-[10px] text-textMuted truncate">${escapeHtml(item.class_label || item.class || 'N/A')}</div>
+                    <div class="text-[10px] text-textMuted mt-1">${formatLastSeen(item.last_seen)}${item.devices ? ` · ${formatNumber(item.devices)} dev` : ''}</div>
+                </div>
+            </div>
+        `).join('');
+    }
 
-    // 4. Data Loading
+    function renderAppDistribution(stats) {
+        if (!Array.isArray(stats) || stats.length === 0) {
+            appUsageChart.data.labels = ['No data'];
+            appUsageChart.data.datasets[0].data = [1];
+            appUsageChart.data.datasets[0].backgroundColor = ['#4b5563'];
+            appUsageChart.update();
+            return;
+        }
+
+        appUsageChart.data.labels = stats.map((item) => item.name || 'N/A');
+        appUsageChart.data.datasets[0].data = stats.map((item) => Number(item.time) || 0);
+        appUsageChart.data.datasets[0].backgroundColor = stats.map((_, index) => APP_COLORS[index % APP_COLORS.length]);
+        appUsageChart.update();
+    }
+
+    async function refreshTraffic() {
+        const data = await apiRequest('traffic');
+        if (!data) {
+            return;
+        }
+
+        const now = Date.now();
+        const tx = Number(data.tx_bytes) || 0;
+        const rx = Number(data.rx_bytes) || 0;
+
+        if (trafficState.previousAt) {
+            const seconds = Math.max(1, (now - trafficState.previousAt) / 1000);
+            const uploadSpeed = Math.max(0, (tx - trafficState.previousTx) / seconds);
+            const downloadSpeed = Math.max(0, (rx - trafficState.previousRx) / seconds);
+
+            trafficState.upload.push(uploadSpeed);
+            trafficState.download.push(downloadSpeed);
+            trafficState.upload.shift();
+            trafficState.download.shift();
+
+            document.getElementById('cur-up-speed').textContent = `${formatBytes(uploadSpeed)}/s`;
+            document.getElementById('cur-down-speed').textContent = `${formatBytes(downloadSpeed)}/s`;
+            trafficChart.update();
+        }
+
+        document.getElementById('total-up').textContent = formatBytes(tx);
+        document.getElementById('total-down').textContent = formatBytes(rx);
+        trafficState.previousTx = tx;
+        trafficState.previousRx = rx;
+        trafficState.previousAt = now;
+    }
+
     async function loadSysInfo() {
         const data = await apiRequest('sysinfo');
-        if (data) {
-            document.getElementById('sys-hostname').innerText = data.model || 'FanchmWrt';
-            document.getElementById('sys-model').innerText = data.model || '-';
-            document.getElementById('sys-firmware').innerText = data.firmware;
-            document.getElementById('sys-kernel').innerText = data.kernel;
-            document.getElementById('sys-uptime').innerText = formatUptime(data.uptime_raw);
-            document.getElementById('cpu-text').innerText = data.cpuUsage + '%';
-            cpuDial.data.datasets[0].data = [data.cpuUsage, 100 - data.cpuUsage]; cpuDial.update();
-            document.getElementById('mem-text').innerText = data.memUsage + '%';
-            memDial.data.datasets[0].data = [data.memUsage, 100 - data.memUsage]; memDial.update();
-            document.getElementById('cpu-temp').innerText = (data.temp > 0 ? data.temp + '°C' : '-');
-            document.getElementById('temp-bar').style.width = Math.min(data.temp, 100) + '%';
+        if (!data) {
+            return;
         }
+
+        document.getElementById('sys-hostname').textContent = data.model || '-';
+        document.getElementById('sys-model').textContent = data.model || '-';
+        document.getElementById('sys-firmware').textContent = data.firmware || '-';
+        document.getElementById('sys-kernel').textContent = data.kernel || '-';
+        document.getElementById('sys-uptime').textContent = formatUptime(data.uptime_raw);
+
+        const cpuUsage = Math.max(0, Math.min(100, Number(data.cpuUsage) || 0));
+        const memUsage = Math.max(0, Math.min(100, Number(data.memUsage) || 0));
+        const temp = Math.max(0, Number(data.temp) || 0);
+
+        document.getElementById('cpu-text').textContent = `${cpuUsage}%`;
+        document.getElementById('mem-text').textContent = `${memUsage}%`;
+        document.getElementById('cpu-temp').textContent = temp > 0 ? `${temp}°C` : '-';
+        document.getElementById('temp-bar').style.width = `${Math.min(temp, 100)}%`;
+
+        cpuDial.data.datasets[0].data = [cpuUsage, 100 - cpuUsage];
+        memDial.data.datasets[0].data = [memUsage, 100 - memUsage];
+        cpuDial.update();
+        memDial.update();
     }
 
     async function loadNetInfo() {
         const data = await apiRequest('netinfo');
-        if (data) {
-            document.getElementById('wan-status-text').innerText = data.wanStatus === 'up' ? '已联网' : '断开';
-            document.getElementById('lan-ip').innerText = data.lanIp;
-            document.getElementById('wan-ip').innerText = data.wanIp;
+        if (!data) {
+            return;
         }
+
+        document.getElementById('wan-status-text').textContent = data.wanStatus === 'up' ? 'Online' : 'Offline';
+        document.getElementById('wan-status-text').className = data.wanStatus === 'up'
+            ? 'text-lg font-semibold text-accentGreen'
+            : 'text-lg font-semibold text-accentOrange';
+        document.getElementById('lan-ip').textContent = data.lanIp || '-';
+        document.getElementById('wan-ip').textContent = data.wanIp || '-';
+        document.getElementById('conn-count').textContent = formatNumber(data.connCount);
     }
 
     async function loadDevices() {
         const devices = await apiRequest('devices');
-        if (!devices) return;
-        document.getElementById('active-device-count').innerText = devices.filter(d => d.active).length;
-        const html = devices.slice(0, 10).map(dev => `
-            <div class="flex items-center justify-between text-xxs group">
-                <span class="text-gray-400 truncate w-32">${dev.name || dev.mac}</span>
-                <span class="text-textMuted font-mono">${dev.ip}</span>
-                <span class="w-1.5 h-1.5 rounded-full ${dev.active ? 'bg-accentGreen' : 'bg-gray-600'}"></span>
+        const list = Array.isArray(devices) ? devices : [];
+        document.getElementById('active-device-count').textContent = formatNumber(list.filter((item) => item.active).length);
+
+        const container = document.getElementById('devices-list');
+        if (list.length === 0) {
+            container.innerHTML = '<div class="text-xs text-textMuted">No online devices.</div>';
+            return;
+        }
+
+        container.innerHTML = list.slice(0, 12).map((item) => `
+            <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="text-gray-300 truncate flex-1">${escapeHtml(item.name || item.mac || '-')}</span>
+                <span class="text-textMuted font-mono shrink-0">${escapeHtml(item.ip || '-')}</span>
+                <span class="w-2 h-2 rounded-full shrink-0 ${item.active ? 'bg-accentGreen' : 'bg-gray-500'}"></span>
             </div>
         `).join('');
-        document.getElementById('devices-list').innerHTML = html;
-        lucide.createIcons();
     }
 
     async function loadDomains() {
         const data = await apiRequest('domains');
-        if (!data || !data.top) return;
-        const max = data.top[0] ? data.top[0].count : 1;
-        const html = data.top.slice(0, 8).map(item => `
-            <div class="space-y-1">
-                <div class="flex justify-between text-xxs"><span class="truncate w-40 font-mono">${item.domain}</span><span class="text-accentBlue">${item.count}</span></div>
-                <div class="w-full bg-bgBase h-0.5"><div class="bg-accentBlue h-full" style="width: ${(item.count/max)*100}%"></div></div>
-            </div>
-        `).join('');
-        document.getElementById('domains-list').innerHTML = html;
+        const badge = document.getElementById('domains-source');
+        const container = document.getElementById('domains-list');
+
+        if (!data) {
+            badge.textContent = 'Error';
+            container.innerHTML = '<div class="text-xs text-textMuted">Failed to load domains.</div>';
+            return;
+        }
+
+        badge.textContent = domainSourceLabel(data.source);
+        const top = Array.isArray(data.top) ? data.top : [];
+        if (top.length === 0) {
+            container.innerHTML = '<div class="text-xs text-textMuted">No domain records.</div>';
+            return;
+        }
+
+        const maxCount = Math.max(1, Number(top[0].count) || 1);
+        container.innerHTML = top.slice(0, 8).map((item) => {
+            const width = Math.max(6, Math.round(((Number(item.count) || 0) / maxCount) * 100));
+            return `
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between gap-3 text-xxs">
+                        <span class="truncate flex-1 font-mono text-gray-300">${escapeHtml(item.domain || '-')}</span>
+                        <span class="text-accentBlue shrink-0">${formatNumber(item.count)}</span>
+                    </div>
+                    <div class="w-full bg-bgBase rounded-full h-1 overflow-hidden">
+                        <div class="bg-accentBlue h-full rounded-full" style="width:${width}%"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
 
     async function loadOafStatus() {
         const data = await apiRequest('status', API_OAF);
-        if (data) {
-            document.getElementById('oaf-version').innerText = data.current_version;
-            document.getElementById('oaf-engine').innerText = data.engine;
+        if (!data) {
+            document.getElementById('oaf-version').textContent = '-';
+            document.getElementById('oaf-engine').textContent = 'Unavailable';
+            renderActiveApps([]);
+            renderAppDistribution([]);
+            return;
         }
+
+        document.getElementById('oaf-version').textContent = data.current_version || '-';
+        document.getElementById('oaf-engine').textContent = data.engine || '-';
+        renderActiveApps(data.active_apps || []);
+        renderAppDistribution(data.class_stats || []);
     }
 
     async function uploadOafFeature() {
         const fileInput = document.getElementById('oaf-file-input');
-        if (!fileInput.files[0]) return;
-        const formData = new FormData(); formData.append('file', fileInput.files[0]);
-        const btn = document.getElementById('oaf-upload-btn');
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+            setUploadStatus('Please select a file first.', 'error');
+            return;
+        }
+
+        const button = document.getElementById('oaf-upload-btn');
         const progress = document.getElementById('oaf-progress-container');
         const bar = document.getElementById('oaf-bar');
-        btn.disabled = true; progress.classList.remove('hidden');
-        const xhr = new XMLHttpRequest(); xhr.open('POST', `${API_OAF}/upload`, true);
-        xhr.upload.onprogress = (e) => { if (e.lengthComputable) { bar.style.width = Math.round((e.loaded/e.total)*100) + '%'; } };
-        xhr.onload = () => { setTimeout(() => location.reload(), 2000); };
+        const formData = new FormData();
+        formData.append('file', file);
+
+        button.disabled = true;
+        progress.classList.remove('hidden');
+        bar.style.width = '0%';
+        setUploadStatus(`Uploading ${file.name} ...`);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_OAF}/upload`, true);
+        xhr.responseType = 'json';
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const percent = Math.round((event.loaded / event.total) * 100);
+                bar.style.width = `${percent}%`;
+            }
+        };
+
+        xhr.onload = async () => {
+            const payload = xhr.response || {};
+            if (xhr.status >= 200 && xhr.status < 300 && payload.success) {
+                setUploadStatus(payload.message || 'Upload complete.', 'success');
+                await loadOafStatus();
+                fileInput.value = '';
+                setTimeout(() => {
+                    progress.classList.add('hidden');
+                    bar.style.width = '0%';
+                }, 1200);
+            } else {
+                setUploadStatus((payload && payload.message) || 'Upload failed.', 'error');
+            }
+        };
+
+        xhr.onerror = () => {
+            setUploadStatus('Upload failed.', 'error');
+        };
+
+        xhr.onloadend = () => {
+            button.disabled = false;
+        };
+
         xhr.send(formData);
     }
 
-    // 初始化
-    loadSysInfo(); loadNetInfo(); loadDevices(); loadDomains(); loadOafStatus();
-    lucide.createIcons();
-    setInterval(refreshTraffic, 3000);
-    setInterval(loadDevices, 15000);
+    async function boot() {
+        lucide.createIcons();
+        await Promise.all([
+            loadSysInfo(),
+            loadNetInfo(),
+            loadDevices(),
+            loadDomains(),
+            loadOafStatus()
+        ]);
+        await refreshTraffic();
+
+        setInterval(refreshTraffic, 3000);
+        setInterval(loadNetInfo, 15000);
+        setInterval(loadDevices, 15000);
+        setInterval(loadDomains, 30000);
+        setInterval(loadSysInfo, 30000);
+        setInterval(loadOafStatus, 45000);
+    }
+
+    boot();
 </script>
 <%+footer%>

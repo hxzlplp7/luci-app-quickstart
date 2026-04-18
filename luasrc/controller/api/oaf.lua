@@ -1,77 +1,683 @@
--- 修复已废弃的 module 函数及未定义全局变量警告
 local fs = require "nixio.fs"
 local http = require "luci.http"
 local sys = require "luci.sys"
 local json = require "luci.jsonc"
+local util = require "luci.util"
 local d = require "luci.dispatcher"
 
--- 定义模块表（兼容 Lua 5.1/5.4）
 local M = {}
 
+local FEATURE_ROOT = "/etc/appfilter"
+local FEATURE_FILE = FEATURE_ROOT .. "/feature.cfg"
+local FEATURE_LINK = "/tmp/feature.cfg"
+local VERSION_FILE = FEATURE_ROOT .. "/version.txt"
+local ICON_DIR = "/www/luci-static/resources/app_icons"
+local TMP_ROOT = "/tmp/oaf-upload"
+local MAX_SIZE = 32 * 1024 * 1024
+local ACTIVE_WINDOW = 3600
+
 function M.index()
-    -- 使用 luci.dispatcher 的明确引用来定义 API 路由
-    d.entry({"api", "oaf", "status"}, d.call("action_status"), nil).sysauth = true
-    d.entry({"api", "oaf", "upload"}, d.call("action_upload"), nil).sysauth = true
+    d.entry({ "api", "oaf", "status" }, d.call("action_status"), nil).sysauth = true
+    d.entry({ "api", "oaf", "upload" }, d.call("action_upload"), nil).sysauth = true
 end
 
--- 导出 action 函数供控制器调度使用
-M.action_status = function()
-    http.prepare_content("application/json")
-    
-    local version = fs.readfile("/etc/appfilter/version.txt")
-    if not version then version = "20240101 (内置)" end
-    
-    local response = {
-        status = "running",
-        current_version = string.gsub(version, "\n", ""),
-        engine = "OpenAppFilter v6.1.5",
-        last_update = os.date("%Y-%m-%d %H:%M:%S")
+local function trim(value)
+    return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function basename(path)
+    local name = tostring(path or ""):gsub("\\", "/"):match("([^/]+)$") or "feature.bin"
+    name = name:gsub("[^%w%._%-]", "_")
+    if name == "" then
+        name = "feature.bin"
+    end
+    return name
+end
+
+local function shell_quote(value)
+    return "'" .. tostring(value or ""):gsub("'", [['"'"']]) .. "'"
+end
+
+local function path_exists(path)
+    return fs.access(path) and true or false
+end
+
+local function ensure_dir(path)
+    return sys.call("mkdir -p " .. shell_quote(path) .. " >/dev/null 2>&1") == 0
+end
+
+local function cleanup_tmp()
+    sys.call("rm -rf " .. shell_quote(TMP_ROOT) .. " >/dev/null 2>&1")
+end
+
+local function read_first_line(path)
+    local fp = io.open(path, "r")
+    if not fp then
+        return nil
+    end
+
+    local line = fp:read("*l")
+    fp:close()
+    return line
+end
+
+local function stat_size(path)
+    local st = fs.stat(path)
+    if st and st.size then
+        return tonumber(st.size) or 0
+    end
+    return 0
+end
+
+local function exec_trim(cmd)
+    return trim(sys.exec(cmd .. " 2>/dev/null"))
+end
+
+local function call_appfilter(method, payload)
+    local ok, response = pcall(util.ubus, "appfilter", method, payload or {})
+    if ok and type(response) == "table" then
+        return response
+    end
+    return nil
+end
+
+local function parse_version_string(raw)
+    return tostring(raw or ""):match("(%d+%.%d+%.%d+)") or ""
+end
+
+local function split_version(raw)
+    local parts = {}
+    for num in tostring(raw or ""):gmatch("(%d+)") do
+        parts[#parts + 1] = tonumber(num) or 0
+    end
+    return parts
+end
+
+local function compare_versions(left, right)
+    local lhs = split_version(left)
+    local rhs = split_version(right)
+    local max_len = math.max(#lhs, #rhs)
+
+    for i = 1, max_len do
+        local a = lhs[i] or 0
+        local b = rhs[i] or 0
+        if a < b then
+            return -1
+        end
+        if a > b then
+            return 1
+        end
+    end
+
+    return 0
+end
+
+local function parse_feature_catalog(path)
+    local catalog = {
+        path = path,
+        version = "",
+        format = "",
+        app_count = 0,
+        apps = {},
+        classes = {},
     }
-    
-    http.write(json.stringify(response))
-end
 
-M.action_upload = function()
-    local tmp_file = "/tmp/oaf_feature_upload.bin"
-    
-    http.setfilehandler(
-        function(meta, chunk, eof)
-            if not meta then return end
-            if meta.name == "file" then
-                local fp = io.open(tmp_file, chunk and "a" or "w")
-                if fp and chunk then
-                    fp:write(chunk)
-                    fp:close()
+    if not path or not path_exists(path) then
+        return catalog
+    end
+
+    local fp = io.open(path, "r")
+    if not fp then
+        return catalog
+    end
+
+    local current_class = nil
+    local current_label = nil
+
+    while true do
+        local raw = fp:read("*l")
+        if not raw then
+            break
+        end
+
+        local line = trim(raw)
+        if line ~= "" then
+            local version = line:match("^#version%s+(.+)$")
+            if version then
+                catalog.version = trim(version)
+            else
+                local format = line:match("^#format%s+(.+)$")
+                if format then
+                    catalog.format = trim(format)
+                else
+                    local class_code, _, class_label = line:match("^#class%s+([%w_%-]+)%s+(%d+)%s+(.+)$")
+                    if class_code then
+                        current_class = trim(class_code)
+                        current_label = trim(class_label or class_code)
+                        catalog.classes[current_class] = current_label
+                    elseif current_class and not line:match("^#") then
+                        local app_id, app_name = line:match("^(%d+)%s+([^:]+):")
+                        if app_id and app_name then
+                            local id = tonumber(app_id)
+                            if id then
+                                catalog.apps[id] = {
+                                    id = id,
+                                    name = trim(app_name),
+                                    class = current_class,
+                                    class_label = current_label or current_class,
+                                }
+                                catalog.app_count = catalog.app_count + 1
+                            end
+                        end
+                    end
                 end
             end
         end
-    )
-
-    local file_upload = http.formvalue("file")
-    http.prepare_content("application/json")
-
-    if fs.access(tmp_file) then
-        sys.call("cp /tmp/oaf_feature_upload.bin /etc/appfilter/feature.bin")
-        sys.call("/etc/init.d/oaf restart >/dev/null 2>&1")
-        
-        local filename = "新版本"
-        if type(file_upload) == "string" and file_upload ~= "" then 
-            filename = file_upload 
-        end
-        fs.writefile("/etc/appfilter/version.txt", filename)
-        fs.unlink(tmp_file)
-        
-        http.write(json.stringify({
-            success = true,
-            message = "特征库已更新，OAF 服务重启成功！"
-        }))
-    else
-        http.write(json.stringify({
-            success = false,
-            message = "上传失败，未接收到文件数据。"
-        }))
     end
+
+    fp:close()
+    return catalog
 end
 
--- 返回模块表 (LuCI 调度器通过此表获取 index 和 action)
+local function load_feature_catalog()
+    local candidates = {
+        FEATURE_FILE,
+        FEATURE_LINK,
+        FEATURE_ROOT .. "/feature_cn.cfg",
+    }
+
+    for _, candidate in ipairs(candidates) do
+        if path_exists(candidate) then
+            return parse_feature_catalog(candidate)
+        end
+    end
+
+    return parse_feature_catalog(nil)
+end
+
+local function get_engine_info()
+    local status = call_appfilter("get_oaf_status", {}) or {}
+    local data = status.data or status
+    local engine_version = parse_version_string(data.engine_version)
+
+    if engine_version == "" then
+        engine_version = parse_version_string(read_first_line("/proc/sys/oaf/version"))
+    end
+
+    local plugin_version = trim(data.version or "")
+    return engine_version, plugin_version, data
+end
+
+local function collect_device_macs()
+    local macs = {}
+    local seen = {}
+    local visit_data = call_appfilter("visit_list", {}) or {}
+
+    for _, device in ipairs(visit_data.dev_list or {}) do
+        local mac = trim(device.mac)
+        if mac ~= "" and not seen[mac] then
+            seen[mac] = true
+            macs[#macs + 1] = mac
+        end
+    end
+
+    if #macs == 0 then
+        local dev_data = call_appfilter("dev_list", {}) or {}
+        local source = dev_data.dev_list or dev_data.list or dev_data
+
+        if type(source) == "table" then
+            for _, device in ipairs(source) do
+                local mac = trim(device.mac)
+                if mac ~= "" and not seen[mac] then
+                    seen[mac] = true
+                    macs[#macs + 1] = mac
+                end
+            end
+        end
+    end
+
+    return macs, visit_data.dev_list or {}
+end
+
+local function icon_url_for(app_id)
+    local path = ICON_DIR .. "/" .. tostring(app_id) .. ".png"
+    if path_exists(path) then
+        return "/luci-static/resources/app_icons/" .. tostring(app_id) .. ".png"
+    end
+    return "/luci-static/resources/app_icons/default.png"
+end
+
+local function collect_usage_overview(catalog)
+    local now = os.time()
+    local macs, visit_devices = collect_device_macs()
+    local recent_apps = {}
+    local usage_by_app = {}
+    local class_totals = {}
+
+    for _, device in ipairs(visit_devices) do
+        for _, visit in ipairs(device.visit_info or {}) do
+            local app_id = tonumber(visit.appid or visit.id)
+            local app_info = app_id and catalog.apps[app_id] or nil
+
+            if app_info then
+                local entry = recent_apps[app_id] or {
+                    id = app_id,
+                    name = app_info.name,
+                    class = app_info.class,
+                    class_label = app_info.class_label,
+                    latest_time = 0,
+                    devices = 0,
+                }
+
+                local latest_time = tonumber(visit.latest_time or visit.lt or 0) or 0
+                if latest_time > entry.latest_time then
+                    entry.latest_time = latest_time
+                end
+
+                entry.devices = entry.devices + 1
+                recent_apps[app_id] = entry
+            end
+        end
+    end
+
+    for _, mac in ipairs(macs) do
+        local visit_time = call_appfilter("dev_visit_time", { mac = mac }) or {}
+        for _, item in ipairs(visit_time.list or {}) do
+            local app_id = tonumber(item.id)
+            local total_time = tonumber(item.t or item.time or item.total_time) or 0
+            local app_info = app_id and catalog.apps[app_id] or nil
+
+            if app_id and total_time > 0 then
+                local entry = usage_by_app[app_id] or {
+                    id = app_id,
+                    name = trim(item.name or (app_info and app_info.name) or tostring(app_id)),
+                    class = app_info and app_info.class or "",
+                    class_label = app_info and app_info.class_label or "",
+                    time = 0,
+                }
+
+                entry.time = entry.time + total_time
+                usage_by_app[app_id] = entry
+            end
+        end
+
+        local class_time = call_appfilter("app_class_visit_time", { mac = mac }) or {}
+        for _, item in ipairs(class_time.class_list or {}) do
+            local key = trim(item.name or item.type or "")
+            local total_time = tonumber(item.visit_time) or 0
+
+            if key ~= "" and total_time > 0 then
+                local entry = class_totals[key] or {
+                    key = key,
+                    name = trim(item.name or key),
+                    time = 0,
+                }
+
+                entry.time = entry.time + total_time
+                class_totals[key] = entry
+            end
+        end
+    end
+
+    if next(class_totals) == nil then
+        for _, item in pairs(usage_by_app) do
+            local key = trim(item.class_label ~= "" and item.class_label or item.class)
+            if key ~= "" and item.time > 0 then
+                local entry = class_totals[key] or {
+                    key = key,
+                    name = key,
+                    time = 0,
+                }
+
+                entry.time = entry.time + item.time
+                class_totals[key] = entry
+            end
+        end
+    end
+
+    local active_apps = {}
+    for app_id, item in pairs(recent_apps) do
+        local usage = usage_by_app[app_id]
+        item.time = usage and usage.time or 0
+        item.icon = icon_url_for(app_id)
+        item.last_seen = math.max(0, now - (item.latest_time or 0))
+        active_apps[#active_apps + 1] = item
+    end
+
+    table.sort(active_apps, function(a, b)
+        if (a.latest_time or 0) == (b.latest_time or 0) then
+            if (a.time or 0) == (b.time or 0) then
+                return (a.devices or 0) > (b.devices or 0)
+            end
+            return (a.time or 0) > (b.time or 0)
+        end
+        return (a.latest_time or 0) > (b.latest_time or 0)
+    end)
+
+    local recent_only = {}
+    for _, item in ipairs(active_apps) do
+        if (item.latest_time or 0) >= (now - ACTIVE_WINDOW) then
+            recent_only[#recent_only + 1] = item
+        end
+    end
+
+    if #recent_only > 0 then
+        active_apps = recent_only
+    else
+        active_apps = {}
+        for app_id, item in pairs(usage_by_app) do
+            item.icon = icon_url_for(app_id)
+            item.devices = recent_apps[app_id] and recent_apps[app_id].devices or 0
+            item.last_seen = recent_apps[app_id] and math.max(0, now - (recent_apps[app_id].latest_time or 0)) or nil
+            active_apps[#active_apps + 1] = item
+        end
+
+        table.sort(active_apps, function(a, b)
+            return (a.time or 0) > (b.time or 0)
+        end)
+    end
+
+    while #active_apps > 8 do
+        table.remove(active_apps)
+    end
+
+    local class_stats = {}
+    for _, item in pairs(class_totals) do
+        class_stats[#class_stats + 1] = item
+    end
+
+    table.sort(class_stats, function(a, b)
+        return (a.time or 0) > (b.time or 0)
+    end)
+
+    while #class_stats > 6 do
+        table.remove(class_stats)
+    end
+
+    return active_apps, class_stats
+end
+
+local function find_archive_candidate(dir, engine_version)
+    local output = sys.exec(
+        "find " .. shell_quote(dir) .. " -type f \\( -name '*.bin' -o -name '*.tar.gz' -o -name '*.tgz' \\) 2>/dev/null"
+    )
+
+    local normal = {}
+    local compat = {}
+
+    for line in tostring(output or ""):gmatch("[^\r\n]+") do
+        local path = trim(line)
+        local lower = path:lower()
+        if lower ~= "" then
+            if lower:match("compat%.bin$") or lower:match("compat%.tar%.gz$") or lower:match("compat%.tgz$") then
+                compat[#compat + 1] = path
+            else
+                normal[#normal + 1] = path
+            end
+        end
+    end
+
+    table.sort(normal)
+    table.sort(compat)
+
+    local prefer_compat = engine_version ~= "" and compare_versions(engine_version, "6.1.4") < 0
+    if prefer_compat then
+        return compat[1] or normal[1]
+    end
+
+    return normal[1] or compat[1]
+end
+
+local function unpack_zip(zip_path, out_dir)
+    local commands = {
+        "unzip -oq " .. shell_quote(zip_path) .. " -d " .. shell_quote(out_dir) .. " >/dev/null 2>&1",
+        "busybox unzip -o " .. shell_quote(zip_path) .. " -d " .. shell_quote(out_dir) .. " >/dev/null 2>&1",
+        "bsdtar -xf " .. shell_quote(zip_path) .. " -C " .. shell_quote(out_dir) .. " >/dev/null 2>&1",
+    }
+
+    for _, command in ipairs(commands) do
+        if sys.call(command) == 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function extract_bundle(archive_path, out_dir)
+    local commands = {
+        "tar -xzf " .. shell_quote(archive_path) .. " -C " .. shell_quote(out_dir) .. " >/dev/null 2>&1",
+        "busybox tar -xzf " .. shell_quote(archive_path) .. " -C " .. shell_quote(out_dir) .. " >/dev/null 2>&1",
+    }
+
+    for _, command in ipairs(commands) do
+        if sys.call(command) == 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function locate_payload(out_dir)
+    local feature_cfg = exec_trim("find " .. shell_quote(out_dir) .. " -type f -name 'feature.cfg' | head -n 1")
+    local app_icons = exec_trim("find " .. shell_quote(out_dir) .. " -type d -name 'app_icons' | head -n 1")
+    return feature_cfg, app_icons
+end
+
+local function copy_payload(feature_cfg, app_icons)
+    if not ensure_dir(FEATURE_ROOT) then
+        return false
+    end
+
+    if sys.call("cp " .. shell_quote(feature_cfg) .. " " .. shell_quote(FEATURE_FILE) .. " >/dev/null 2>&1") ~= 0 then
+        return false
+    end
+
+    if path_exists(FEATURE_LINK) then
+        sys.call("cp " .. shell_quote(feature_cfg) .. " " .. shell_quote(FEATURE_LINK) .. " >/dev/null 2>&1")
+    end
+
+    if app_icons ~= "" and path_exists(app_icons) then
+        ensure_dir(ICON_DIR)
+        sys.call("cp -fpR " .. shell_quote(app_icons .. "/.") .. " " .. shell_quote(ICON_DIR) .. " >/dev/null 2>&1")
+    end
+
+    return true
+end
+
+local function reload_oaf()
+    local commands = {
+        "killall -SIGUSR1 oafd >/dev/null 2>&1",
+        "/etc/init.d/appfilter restart >/dev/null 2>&1",
+        "/etc/init.d/oaf restart >/dev/null 2>&1",
+    }
+
+    for _, command in ipairs(commands) do
+        if sys.call(command) == 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function build_status_response()
+    local catalog = load_feature_catalog()
+    local engine_version, plugin_version, data = get_engine_info()
+    local active_apps, class_stats = collect_usage_overview(catalog)
+    local current_version = catalog.version
+
+    if current_version == "" then
+        current_version = trim(read_first_line(VERSION_FILE))
+    end
+
+    if current_version == "" then
+        current_version = "20240101 (内置)"
+    end
+
+    local engine = "OpenAppFilter"
+    if plugin_version ~= "" then
+        engine = engine .. " " .. plugin_version
+    elseif engine_version ~= "" then
+        engine = engine .. " " .. engine_version
+    end
+
+    return {
+        success = true,
+        available = (catalog.path ~= nil) or (next(active_apps) ~= nil) or (next(class_stats) ~= nil),
+        status = tonumber(data.engine_status or data.enable or 0) == 1 and "running" or "stopped",
+        current_version = current_version,
+        feature_format = catalog.format,
+        app_count = catalog.app_count,
+        engine = engine,
+        engine_version = engine_version,
+        enabled = tonumber(data.enable or 0) == 1,
+        active_apps = active_apps,
+        class_stats = class_stats,
+        last_update = os.date("%Y-%m-%d %H:%M:%S"),
+    }
+end
+
+M.action_status = function()
+    http.prepare_content("application/json")
+    http.write(json.stringify(build_status_response()))
+end
+
+M.action_upload = function()
+    cleanup_tmp()
+    ensure_dir(TMP_ROOT)
+
+    local upload_name = nil
+    local upload_path = nil
+    local upload_fd = nil
+
+    http.setfilehandler(function(meta, chunk, eof)
+        if meta and meta.name == "file" and not upload_path then
+            upload_name = basename(meta.file)
+            upload_path = TMP_ROOT .. "/" .. upload_name
+            upload_fd = io.open(upload_path, "w")
+        end
+
+        if upload_fd and chunk and #chunk > 0 then
+            upload_fd:write(chunk)
+        end
+
+        if eof and upload_fd then
+            upload_fd:close()
+            upload_fd = nil
+        end
+    end)
+
+    http.formvalue("file")
+    http.prepare_content("application/json")
+
+    if not upload_path or not path_exists(upload_path) then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = "未接收到上传文件。",
+        }))
+        return
+    end
+
+    local upload_size = stat_size(upload_path)
+    if upload_size <= 0 then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = "上传文件为空。",
+        }))
+        return
+    end
+
+    if upload_size > MAX_SIZE then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = "上传文件过大，请选择 32MB 以内的特征包。",
+        }))
+        return
+    end
+
+    local stage_dir = TMP_ROOT .. "/stage"
+    local payload_dir = TMP_ROOT .. "/payload"
+    ensure_dir(stage_dir)
+    ensure_dir(payload_dir)
+
+    local archive_path = upload_path
+    local lower_name = upload_name:lower()
+
+    if lower_name:match("%.zip$") then
+        if not unpack_zip(upload_path, stage_dir) then
+            cleanup_tmp()
+            http.write(json.stringify({
+                success = false,
+                message = "zip 包解压失败，系统缺少 unzip/bsdtar 或压缩包已损坏。",
+            }))
+            return
+        end
+
+        local engine_version = get_engine_info()
+        archive_path = find_archive_candidate(stage_dir, engine_version)
+        if not archive_path then
+            cleanup_tmp()
+            http.write(json.stringify({
+                success = false,
+                message = "zip 包里没有找到可用的 .bin 特征库文件。",
+            }))
+            return
+        end
+    end
+
+    if not extract_bundle(archive_path, payload_dir) then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = "特征库解包失败，请上传官网提供的 .bin 或 zip 包。",
+        }))
+        return
+    end
+
+    local feature_cfg, app_icons = locate_payload(payload_dir)
+    if feature_cfg == "" then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = "解包成功，但没有找到 feature.cfg。",
+        }))
+        return
+    end
+
+    local extracted_catalog = parse_feature_catalog(feature_cfg)
+    if extracted_catalog.version == "" then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = "特征库格式不正确，缺少版本标记。",
+        }))
+        return
+    end
+
+    if not copy_payload(feature_cfg, app_icons) then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = "写入特征库失败，请检查 /etc/appfilter 是否可写。",
+        }))
+        return
+    end
+
+    fs.writefile(VERSION_FILE, extracted_catalog.version .. "\n")
+    reload_oaf()
+    cleanup_tmp()
+
+    http.write(json.stringify({
+        success = true,
+        message = "特征库更新成功。",
+        current_version = extracted_catalog.version,
+        app_count = extracted_catalog.app_count,
+    }))
+end
+
 return M

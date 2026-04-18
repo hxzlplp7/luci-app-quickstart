@@ -54,6 +54,10 @@ local function read_all(path)
     local v = f:read("*a"); f:close(); return v
 end
 
+local function trim(value)
+    return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
 local function exec_trim(cmd)
     local p = io.popen(cmd .. " 2>/dev/null")
     if not p then return "" end
@@ -67,6 +71,134 @@ local function path_exists(p)
         f:close(); return true
     end
     return false
+end
+
+local function read_conntrack_count()
+    local direct = tonumber(trim(read_line("/proc/sys/net/netfilter/nf_conntrack_count") or ""))
+    if direct then
+        return direct
+    end
+
+    local from_tool = tonumber(exec_trim("conntrack -C"))
+    if from_tool then
+        return from_tool
+    end
+
+    local from_proc = tonumber(exec_trim("wc -l </proc/net/nf_conntrack"))
+    if from_proc then
+        return from_proc
+    end
+
+    return 0
+end
+
+local function normalize_domain(domain)
+    local value = trim(domain):lower()
+    if value == "" then
+        return nil
+    end
+
+    value = value:gsub("^https?://", "")
+    value = value:gsub("^%*%.", "")
+    value = value:gsub("/.*$", "")
+    value = value:gsub(":.*$", "")
+    value = value:gsub("%.+$", "")
+
+    if value == "" or not value:match("%.") then
+        return nil
+    end
+
+    if not value:match("[%a]") then
+        return nil
+    end
+
+    if value:match("^%d+%.%d+%.%d+%.%d+$") then
+        return nil
+    end
+
+    if value:match("in%-addr%.arpa$") or value:match("^localhost$") then
+        return nil
+    end
+
+    return value
+end
+
+local function extract_domains_from_line(line)
+    local results = {}
+    local seen = {}
+    local patterns = {
+        "-->%s*([%w%-%.]+)%:%d+",
+        "%[DNS%]%s*([%w%-%.]+)",
+        "host=([%w%-%.]+)",
+        "sni=([%w%-%.]+)",
+        "query[%[%]%w]*%s+([%w%-%.]+)%s+from",
+        "reply%s+([%w%-%.]+)%s+is",
+    }
+
+    for _, pattern in ipairs(patterns) do
+        for candidate in tostring(line or ""):gmatch(pattern) do
+            local domain = normalize_domain(candidate)
+            if domain and not seen[domain] then
+                seen[domain] = true
+                results[#results + 1] = domain
+            end
+        end
+    end
+
+    for candidate in tostring(line or ""):gmatch("([%w][%w%-]*[%w]?%.[%w%.%-]+)") do
+        local domain = normalize_domain(candidate)
+        if domain and not seen[domain] then
+            seen[domain] = true
+            results[#results + 1] = domain
+        end
+    end
+
+    return results
+end
+
+local function collect_domains_from_command(command)
+    local domains = {}
+    local pipe = io.popen(command .. " 2>/dev/null")
+    if not pipe then
+        return domains
+    end
+
+    for line in pipe:lines() do
+        local extracted = extract_domains_from_line(line)
+        for _, domain in ipairs(extracted) do
+            domains[#domains + 1] = domain
+        end
+    end
+
+    pipe:close()
+    return domains
+end
+
+local function collect_domain_source()
+    local plugin_sources = {
+        { name = "openclash", path = "/tmp/openclash.log", command = "tail -n 1500 /tmp/openclash.log" },
+        { name = "passwall", path = "/tmp/log/passwall.log", command = "tail -n 1500 /tmp/log/passwall.log" },
+        { name = "passwall2", path = "/tmp/log/passwall2.log", command = "tail -n 1500 /tmp/log/passwall2.log" },
+        { name = "homeproxy", path = "/tmp/homeproxy.log", command = "tail -n 1500 /tmp/homeproxy.log" },
+        { name = "mihomo", path = "/tmp/mihomo.log", command = "tail -n 1500 /tmp/mihomo.log" },
+        { name = "sing-box", path = "/tmp/sing-box.log", command = "tail -n 1500 /tmp/sing-box.log" },
+    }
+
+    for _, source in ipairs(plugin_sources) do
+        if path_exists(source.path) then
+            local domains = collect_domains_from_command(source.command)
+            if #domains > 0 then
+                return source.name, domains
+            end
+        end
+    end
+
+    local direct = collect_domains_from_command("logread | grep -iE 'dnsmasq|smartdns' | tail -n 1500")
+    if #direct > 0 then
+        return "direct", direct
+    end
+
+    return "none", {}
 end
 
 -- =====================================================================
@@ -173,6 +305,7 @@ local function api_netinfo()
         lanIp              = uci:get("network", "lan", "ipaddr") or "192.168.1.1",
         dns                = wan["dns-server"] or {},
         network_uptime_raw = wan.uptime or 0,
+        connCount          = read_conntrack_count(),
     }))
 end
 
@@ -269,41 +402,8 @@ end
 
 local function api_domains()
     local result = { top = {}, recent = {} }
-    local source = "none"
-    local lines = {}
+    local source, lines = collect_domain_source()
     local counts = {}
-
-    if path_exists("/tmp/openclash.log") then
-        source = "openclash"
-        local p = io.popen('grep -iE "dns|connect|host|sni" /tmp/openclash.log 2>/dev/null | tail -n 1000')
-        if p then
-            for line in p:lines() do
-                local domain = line:match("-->%s*([%w%-%.]+)%:%d+") 
-                    or line:match("%[DNS%]%s*([%w%-%.]+)") 
-                    or line:match("host=([%w%-%.]+)") 
-                    or line:match("sni=([%w%-%.]+)")
-                
-                if domain and domain:match("%..") and not domain:match("^%d+%.%d+%.%d+%.%d+$") 
-                   and not domain:match("^192%.168%.") and not domain:match("^127%.") 
-                   and not domain:match("^10%.") then
-                    table.insert(lines, domain)
-                end
-            end
-            p:close()
-        end
-    else
-        source = "dnsmasq"
-        local p = io.popen("logread | grep -i dnsmasq | tail -n 1000")
-        if p then
-            for line in p:lines() do
-                local domain = line:match("query%[%w+%]*%s+([%w%-%.]+)%s+from") or line:match("reply%s+([%w%-%.]+)%s+is")
-                if domain and not domain:match("^%d+%.%d+%.%d+%.%d+$") and not domain:match("in%-addr%.arpa") then 
-                    table.insert(lines, domain)
-                end
-            end
-            p:close()
-        end
-    end
 
     for i = 1, #lines do
         local d_val = lines[i]
