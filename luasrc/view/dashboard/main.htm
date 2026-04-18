@@ -1,570 +1,420 @@
 <%+header%>
-<div class="main-content" id="dashboard-app">
-    <!-- 引入 localized 资源，确保 100% 离线可用 -->
-    <script src="<%=resource%>/dashboard/tailwind.min.js"></script>
-    <script src="<%=resource%>/dashboard/chart.min.js"></script>
-    <script src="<%=resource%>/dashboard/lucide.min.js"></script>
+<!-- 使用本地资源实现 100% 离线 -->
+<script src="/luci-static/dashboard/tailwindcss.js"></script>
+<script src="/luci-static/dashboard/chart.js"></script>
+<script src="/luci-static/dashboard/lucide.js"></script>
 
-    <style>
-        :root {
-            --bg-base: #f1f5f9;
-            --bg-panel: #ffffff;
-            --bg-hover: #f8fafc;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --border-main: #e2e8f0;
-            --accent-blue: #3b82f6;
-            --accent-green: #10b981;
-            --accent-orange: #f59e0b;
+<style>
+    /* 继承用户提供的深色皮肤滚动条与基础样式 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e1e24; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .chart-center-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+</style>
+
+<script>
+    // 注入用户提供的 Tailwind 配置
+    window.tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    bgBase: '#1c1d21', bgPanel: '#24252b', bgHover: '#2d2e34',
+                    textMain: '#d1d5db', textMuted: '#9ca3af', borderMain: '#374151',
+                    accentGreen: '#10b981', accentBlue: '#3b82f6', accentPurple: '#8b5cf6',
+                    accentOrange: '#f97316', accentCyan: '#06b6d4'
+                },
+                fontSize: { 'xxs': '0.65rem' }
+            }
         }
+    }
+</script>
 
-        body {
-            background-color: var(--bg-base);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            margin: 0;
-            font-size: 14px;
-        }
-
-        .dashboard-container {
-            max-width: 1440px;
-            margin: 0 auto;
-            padding: 1.25rem;
-        }
-
-        .glass-card {
-            background: var(--bg-panel);
-            border: 1px solid var(--border-main);
-            border-radius: 12px;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            transition: all 0.2s ease;
-        }
-
-        .glass-card:hover {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            border-color: #cbd5e1;
-        }
-
-        .stat-label { color: var(--text-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-        .stat-value { color: var(--text-main); font-size: 1.5rem; font-weight: 800; }
-
-        /* Scrollbar styles */
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        .chart-container { position: relative; width: 100%; }
-        
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-    </style>
-
-    <div class="dashboard-container space-y-5">
-        <!-- 头部标题栏 -->
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
-            <div>
-                <h1 class="text-2xl font-black text-slate-800 tracking-tight">网络仪表板</h1>
-                <div class="flex items-center gap-2 mt-1">
-                    <span class="flex h-2 w-2 relative">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <p class="text-slate-500 text-xs font-medium">系统运行正常 • <span id="system-time">--:--:--</span></p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="stat-label">数据来源:</div>
-                <div id="domain-source" class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">AUTO</div>
-            </div>
-        </div>
-
-        <!-- 顶部核心指标 -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div class="glass-card p-4 flex flex-col justify-between">
-                <div class="stat-label mb-2 flex items-center gap-1">
-                    <i data-lucide="globe" class="w-3 h-3"></i> 联网状态
-                </div>
-                <div class="flex items-center gap-3">
-                    <div id="wan-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
-                    <div class="stat-value text-slate-400 text-lg" id="wan-status-text">检测中...</div>
-                </div>
-            </div>
-            <div class="glass-card p-4 flex flex-col justify-between">
-                <div class="stat-label mb-2 flex items-center gap-1">
-                    <i data-lucide="users" class="w-3 h-3"></i> 在线设备
-                </div>
-                <div class="stat-value" id="device-count">-</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col justify-between">
-                <div class="stat-label mb-2 flex items-center gap-1">
-                    <i data-lucide="hash" class="w-3 h-3"></i> 并发连接
-                </div>
-                <div class="stat-value" id="conn-count">-</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col justify-between border-l-4 border-l-blue-500">
-                <div class="stat-label mb-2 text-blue-600">实时下载</div>
-                <div class="stat-value text-blue-600 font-mono text-xl" id="down-speed">0 B/s</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col justify-between border-l-4 border-l-emerald-500">
-                <div class="stat-label mb-2 text-emerald-600">实时上传</div>
-                <div class="stat-value text-emerald-600 font-mono text-xl" id="up-speed">0 B/s</div>
-            </div>
-        </div>
-
-        <!-- 中间主要网格 -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <!-- 左侧：流量图表与应用识别 -->
-            <div class="lg:col-span-2 space-y-5">
-                <!-- 流量曲线图 -->
-                <div class="glass-card p-5">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-2">
-                            <div class="p-2 bg-blue-50 rounded-lg text-blue-500">
-                                <i data-lucide="activity" class="w-4 h-4"></i>
-                            </div>
-                            <h3 class="font-bold text-slate-700">实时流量监控 (WAN)</h3>
-                        </div>
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest" id="interface-info">WAN</div>
-                    </div>
-                    <div class="h-[280px]">
-                        <canvas id="trafficChart"></canvas>
-                    </div>
-                </div>
-
-                <!-- 应用与域名识别并排 -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <!-- OAF 活跃应用 -->
-                    <div class="glass-card p-5">
-                        <div class="flex items-center gap-2 mb-4">
-                            <div class="p-2 bg-indigo-50 rounded-lg text-indigo-500">
-                                <i data-lucide="layers" class="w-4 h-4"></i>
-                            </div>
-                            <h3 class="font-bold text-slate-700">活跃应用 (OAF)</h3>
-                        </div>
-                        <div id="oaf-apps-list" class="space-y-3 min-h-[220px]">
-                            <!-- Loading state -->
-                            <div class="flex flex-col items-center justify-center py-12 text-slate-300">
-                                <i data-lucide="loader-2" class="w-6 h-6 animate-spin mb-2"></i>
-                                <span class="text-xs">加载数据中...</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 实时域名 -->
-                    <div class="glass-card p-5">
-                        <div class="flex items-center gap-2 mb-4">
-                            <div class="p-2 bg-sky-50 rounded-lg text-sky-500">
-                                <i data-lucide="globe-2" class="w-4 h-4"></i>
-                            </div>
-                            <h3 class="font-bold text-slate-700">实时域名排行</h3>
-                        </div>
-                        <div id="domain-list" class="space-y-3.5 min-h-[220px]">
-                            <!-- Domain ranking -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 右侧：系统状态与 OAF 管理 -->
-            <div class="space-y-5">
-                <!-- 资源占用 -->
-                <div class="glass-card p-5">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2 mb-5">
-                        <i data-lucide="hard-drive" class="w-4 h-4 text-slate-400"></i> 系统资源
-                    </h3>
-                    <div class="space-y-5">
-                        <div>
-                            <div class="flex justify-between text-xs mb-1.5">
-                                <span class="text-slate-500 font-medium">CPU 使用率</span>
-                                <span id="cpu-usage-val" class="font-bold text-slate-700">0%</span>
-                            </div>
-                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                <div id="cpu-bar" class="bg-blue-500 h-full transition-all duration-700 ease-out w-0"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-xs mb-1.5">
-                                <span class="text-slate-500 font-medium">内存占用</span>
-                                <span id="mem-usage-val" class="font-bold text-slate-700">0%</span>
-                            </div>
-                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                <div id="mem-bar" class="bg-emerald-500 h-full transition-all duration-700 ease-out w-0"></div>
-                            </div>
-                        </div>
-                        <div class="pt-2 grid grid-cols-2 gap-2">
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <div class="text-[10px] text-slate-400 uppercase font-bold mb-1">系统温度</div>
-                                <div class="text-sm font-bold text-slate-700" id="sys-temp">0°C</div>
-                            </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <div class="text-[10px] text-slate-400 uppercase font-bold mb-1">路由版本</div>
-                                <div class="text-[11px] font-bold text-slate-700 truncate" id="sys-firmware">-</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- OAF 特征库管理 -->
-                <div class="glass-card p-5 relative overflow-hidden">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2 mb-4">
-                        <i data-lucide="shield" class="w-4 h-4 text-orange-500"></i> OAF 管理
-                    </h3>
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-slate-500">特征库版本</span>
-                            <span class="font-mono px-2 py-0.5 bg-orange-50 text-orange-600 rounded font-bold" id="oaf-version">-</span>
-                        </div>
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-slate-500">引擎状态</span>
-                            <span id="oaf-engine" class="font-bold">Unknown</span>
-                        </div>
-                        
-                        <div class="pt-2">
-                            <label id="oaf-upload-zone" class="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-orange-200 hover:bg-orange-50 transition-all group cursor-pointer block">
-                                <input type="file" id="oaf-file" class="hidden" aria-label="选择 OAF 特征库文件">
-                                <i data-lucide="cloud-upload" class="w-6 h-6 text-slate-300 mx-auto mb-1 group-hover:text-orange-400"></i>
-                                <p class="text-[10px] text-slate-400 font-medium">点击此处选择特征库文件 (.bin/.zip)</p>
-                            </label>
-                            <button id="oaf-update-btn" class="w-full mt-3 bg-slate-800 hover:bg-black text-white py-2.5 rounded-xl text-xs font-black tracking-widest uppercase transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                                立即更新
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 应用分布占比 -->
-                <div class="glass-card p-5">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2 mb-4">
-                        <i data-lucide="pie-chart" class="w-4 h-4 text-purple-500"></i> 流量分类占比
-                    </h3>
-                    <div class="h-[180px] flex items-center justify-center relative">
-                        <canvas id="distributionChart"></canvas>
-                        <div id="no-dist-data" class="absolute inset-0 flex items-center justify-center bg-white/80 hidden">
-                             <span class="text-xs font-bold text-slate-300">暂无数据</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="bg-bgBase text-textMain min-h-[calc(100vh-120px)] flex flex-col p-4 rounded-xl overflow-y-auto">
+    <!-- 头部面包屑 -->
+    <div class="flex items-center gap-2 text-xs text-textMuted mb-4">
+        <i data-lucide="home" class="w-3 h-3"></i>
+        <span>></span>
+        <span>仪表板</span>
     </div>
 
-    <!-- 逻辑脚本 -->
-    <script>
-        const API_BASE = '<%=luci.dispatcher.build_url("admin", "dashboard", "api")%>';
-        const API_OAF = '<%=luci.dispatcher.build_url("admin", "dashboard", "oaf_api")%>';
-
-        let charts = {};
-        const MAX_POINTS = 30;
-        const historyData = { 
-            down: Array(MAX_POINTS).fill(0), 
-            up: Array(MAX_POINTS).fill(0), 
-            labels: Array(MAX_POINTS).fill('') 
-        };
-        let lastTraffic = { tx: 0, rx: 0, time: Date.now() };
-
-        // API 基础调用
-        async function apiRequest(endpoint, base = API_BASE) {
-            try {
-                const res = await fetch(`${base}/${endpoint}`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return await res.json();
-            } catch (e) {
-                console.error(`API Fetch Error [${endpoint}]:`, e);
-                return null;
-            }
-        }
-
-        // 单位转换
-        function formatBytes(bytes, decimals = 2) {
-            if (bytes === 0) return '0 B';
-            const k = 1024, dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-        }
-
-        function formatUptime(seconds) {
-            const d = Math.floor(seconds / 86400);
-            const h = Math.floor((seconds % 86400) / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            return `${d}d ${h}h ${m}m`;
-        }
-
-        // 初始化图表
-        function initCharts() {
-            const trafficCtx = document.getElementById('trafficChart').getContext('2d');
-            charts.traffic = new Chart(trafficCtx, {
-                type: 'line',
-                data: {
-                    labels: historyData.labels,
-                    datasets: [
-                        {
-                            label: '下载',
-                            data: historyData.down,
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.05)',
-                            fill: true,
-                            tension: 0.45,
-                            pointRadius: 0,
-                            borderWidth: 2.5
-                        },
-                        {
-                            label: '上传',
-                            data: historyData.up,
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.05)',
-                            fill: true,
-                            tension: 0.45,
-                            pointRadius: 0,
-                            borderWidth: 2.5
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { display: false },
-                        y: { 
-                            beginAtZero: true, 
-                            grid: { color: '#f1f5f9', drawBorder: false },
-                            ticks: { 
-                                color: '#94a3b8', 
-                                font: { size: 10, weight: 'bold' },
-                                callback: (v) => formatBytes(v) 
-                            } 
-                        }
-                    }
-                }
-            });
-
-            const distCtx = document.getElementById('distributionChart').getContext('2d');
-            charts.dist = new Chart(distCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        data: [],
-                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'],
-                        borderWidth: 2,
-                        borderColor: '#ffffff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '75%',
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        // 加载网络信息
-        async function loadNetInfo() {
-            const data = await apiRequest('netinfo');
-            if (!data) return;
-
-            const statusText = document.getElementById('wan-status-text');
-            const statusDot = document.getElementById('wan-dot');
+    <!-- 主布局网格 -->
+    <div class="flex flex-col lg:flex-row gap-4">
+        
+        <!-- 左侧/中间 主内容区 -->
+        <div class="flex-1 flex flex-col gap-4 min-w-0">
             
-            // 重要：处理后端返回的 up/down 状态
-            const isUp = (data.wanStatus === 'up');
-            statusText.textContent = isUp ? '已联网' : '未联网';
-            statusText.className = isUp ? 'stat-value text-emerald-500' : 'stat-value text-orange-500';
-            statusDot.className = isUp ? 
-                'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 
-                'w-2.5 h-2.5 rounded-full bg-orange-500';
+            <!-- 指标行 -->
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
+                    <div class="text-xs text-textMuted mb-1">联网状态</div>
+                    <div class="text-accentGreen font-semibold text-sm" id="wan-status-text">检测中...</div>
+                </div>
+                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
+                    <div class="text-xs text-textMuted mb-1">在线设备</div>
+                    <div class="text-gray-200 font-semibold text-xl" id="active-device-count">0</div>
+                </div>
+                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
+                    <div class="text-xs text-textMuted mb-1">连接数</div>
+                    <div class="text-gray-200 font-semibold text-xl" id="conn-count">-</div>
+                </div>
+                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
+                    <div class="text-xs text-textMuted mb-1">今日下载</div>
+                    <div class="text-gray-200 font-semibold text-sm truncate" id="total-down">-</div>
+                </div>
+                <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
+                    <div class="text-xs text-textMuted mb-1">今日上传</div>
+                    <div class="text-gray-200 font-semibold text-sm truncate" id="total-up">-</div>
+                </div>
+            </div>
 
-            document.getElementById('device-count').textContent = data.devicesCount || data.connCount || '-';
-            document.getElementById('conn-count').textContent = data.connCount || '-';
-            document.getElementById('interface-info').textContent = data.interfaceName || 'WAN';
-        }
+            <!-- 流量统计图表 -->
+            <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-sm font-medium text-gray-200 flex items-center gap-2">
+                        <i data-lucide="activity" class="w-4 h-4 text-accentGreen"></i>
+                        流量统计(wan)
+                    </h3>
+                </div>
+                <div class="h-64 w-full relative">
+                    <canvas id="trafficChart"></canvas>
+                </div>
+                <div class="flex justify-center gap-6 mt-4 text-[10px] text-textMuted font-mono">
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accentGreen"></span> 下行: <span id="cur-down-speed">0 KB/s</span></span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accentBlue"></span> 上行: <span id="cur-up-speed">0 KB/s</span></span>
+                </div>
+            </div>
 
-        // 流量更新逻辑
-        async function updateTraffic() {
-            const data = await apiRequest('traffic');
-            if (!data) return;
-
-            const now = Date.now();
-            const elapsed = (now - lastTraffic.time) / 1000;
-            
-            if (lastTraffic.tx > 0) {
-                const rx_bps = Math.max(0, (data.rx_bytes - lastTraffic.rx) / elapsed);
-                const tx_bps = Math.max(0, (data.tx_bytes - lastTraffic.tx) / elapsed);
-
-                document.getElementById('down-speed').textContent = formatBytes(rx_bps) + '/s';
-                document.getElementById('up-speed').textContent = formatBytes(tx_bps) + '/s';
-
-                historyData.down.shift(); historyData.down.push(rx_bps);
-                historyData.up.shift(); historyData.up.push(tx_bps);
-                charts.traffic.update('none');
-            }
-
-            lastTraffic = { tx: data.tx_bytes, rx: data.rx_bytes, time: now };
-        }
-
-        // 系统信息
-        async function loadSysInfo() {
-            const data = await apiRequest('sysinfo');
-            if (!data) return;
-
-            document.getElementById('sys-model').textContent = data.model;
-            document.getElementById('sys-firmware').textContent = data.firmware;
-            document.getElementById('sys-uptime').textContent = formatUptime(data.uptime_raw);
-            document.getElementById('sys-temp').textContent = `${data.temp}°C`;
-            
-            document.getElementById('cpu-usage-val').textContent = `${data.cpuUsage}%`;
-            document.getElementById('cpu-bar').style.width = `${data.cpuUsage}%`;
-            
-            document.getElementById('mem-usage-val').textContent = `${data.memUsage}%`;
-            document.getElementById('mem-bar').style.width = `${data.memUsage}%`;
-
-            const time = new Date(data.systime_raw * 1000);
-            document.getElementById('system-time').textContent = time.toLocaleTimeString('zh-CN', { hour12: false });
-        }
-
-        // OAF 核心识别逻辑
-        async function loadOafStatus() {
-            const data = await apiRequest('status', API_OAF);
-            if (!data) return;
-
-            document.getElementById('oaf-version').textContent = data.current_version || 'N/A';
-            const engineTag = document.getElementById('oaf-engine');
-            const isRun = (data.status === 'running');
-            engineTag.textContent = isRun ? '正在识别' : '服务停止';
-            engineTag.className = isRun ? 
-                'px-2 py-0.5 rounded-full text-[10px] bg-emerald-50 text-emerald-600 font-black uppercase' : 
-                'px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-400 font-black uppercase';
-
-            renderActiveApps(data.active_apps || []);
-            renderAppDistribution(data.class_stats || []);
-        }
-
-        function renderActiveApps(apps) {
-            const container = document.getElementById('oaf-apps-list');
-            if (!apps || apps.length === 0) {
-                container.innerHTML = `
-                    <div class="flex flex-col items-center justify-center py-12 text-slate-300 animate-fade-in">
-                        <i data-lucide="coffee" class="w-10 h-10 opacity-20 mb-3"></i>
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-slate-400">尚未识别到活动应用</span>
-                    </div>
-                `;
-                lucide.createIcons({ props: { container }});
-                return;
-            }
-
-            container.innerHTML = apps.map(app => `
-                <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:shadow-md hover:border-blue-100 transition-all animate-fade-in">
-                    <div class="flex items-center gap-3">
-                        <div class="w-11 h-11 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 p-1.5">
-                             <img src="${app.icon || '/luci-static/resources/dashboard/app_icons/default.png'}" 
-                                  onerror="this.src='/luci-static/resources/dashboard/app_icons/default.png'"
-                                  class="w-full h-full object-contain filter drop-shadow-sm">
+            <!-- OAF 活跃应用与特征库更新 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-bgPanel rounded p-4 border border-borderMain">
+                    <h3 class="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+                        <i data-lucide="layout-grid" class="w-4 h-4 text-accentPurple"></i>
+                        活跃APP
+                    </h3>
+                    <div class="flex flex-wrap gap-x-6 gap-y-4" id="oaf-apps-list">
+                        <!-- Mock Apps for Visuals -->
+                        <div class="flex flex-col items-center gap-1 w-10">
+                            <div class="w-8 h-8 rounded bg-green-500 flex items-center justify-center text-white"><i data-lucide="play" class="w-4 h-4"></i></div>
+                            <span class="text-xxs text-textMuted truncate w-full text-center">视频</span>
                         </div>
-                        <div>
-                            <div class="text-[13px] font-black text-slate-700 leading-tight">${app.name}</div>
-                            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">${app.category || '其它'}</div>
+                        <div class="flex flex-col items-center gap-1 w-10">
+                            <div class="w-8 h-8 rounded bg-blue-500 flex items-center justify-center text-white"><i data-lucide="message-square" class="w-4 h-4"></i></div>
+                            <span class="text-xxs text-textMuted truncate w-full text-center">社交</span>
                         </div>
                     </div>
-                    <div class="text-right">
-                        <div class="text-[11px] font-black text-blue-600">${app.duration_text || '< 1m'}</div>
-                        <div class="text-[9px] text-slate-400 font-bold uppercase">时长</div>
+                </div>
+
+                <!-- OAF 特征库更新 -->
+                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col">
+                    <h3 class="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-accentOrange"></i>
+                        OAF 特征库
+                    </h3>
+                    <div class="space-y-2 text-xs mb-4">
+                        <div class="flex justify-between"><span class="text-textMuted">版本</span><span class="text-gray-300" id="oaf-version">-</span></div>
+                        <div class="flex justify-between"><span class="text-textMuted">引擎</span><span class="text-gray-300" id="oaf-engine">-</span></div>
+                    </div>
+                    <div class="mt-auto space-y-3">
+                        <label class="block">
+                            <input type="file" title="选择特征库文件" id="oaf-file-input" class="block w-full text-[10px] text-textMuted
+                              file:mr-2 file:py-1 file:px-3
+                              file:rounded-full file:border-0
+                              file:text-xxs file:font-semibold
+                              file:bg-bgHover file:text-accentOrange
+                              cursor-pointer
+                            "/>
+                        </label>
+                        <button id="oaf-upload-btn" onclick="uploadOafFeature()" class="w-full py-1.5 bg-accentOrange hover:bg-orange-600 text-white text-xs rounded transition-colors flex items-center justify-center gap-2">
+                            <i data-lucide="upload" class="w-3 h-3"></i> 立即更新
+                        </button>
+                        <div id="oaf-progress-container" class="hidden">
+                            <div class="w-full bg-bgBase h-1 rounded overflow-hidden">
+                                <div id="oaf-bar" class="bg-accentBlue h-full w-0 transition-all duration-300"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            `).join('');
-        }
+            </div>
 
-        function renderAppDistribution(stats) {
-            const noData = document.getElementById('no-dist-data');
-            if (!stats || stats.length === 0) {
-                noData.classList.remove('hidden');
-                charts.dist.data.labels = [];
-                charts.dist.data.datasets[0].data = [];
-            } else {
-                noData.classList.add('hidden');
-                charts.dist.data.labels = stats.map(s => s.name);
-                charts.dist.data.datasets[0].data = stats.map(s => s.value);
-            }
-            charts.dist.update();
-        }
-
-        async function loadDomains() {
-            const data = await apiRequest('domains');
-            const container = document.getElementById('domain-list');
-            if (!data || !data.top || data.top.length === 0) {
-                container.innerHTML = `<div class="flex items-center justify-center h-full text-slate-300 text-xs font-bold">暂无数据记录</div>`;
-                return;
-            }
-            document.getElementById('domain-source').textContent = (data.source || 'AUTO').toUpperCase();
-            const max = data.top[0].count;
-            container.innerHTML = data.top.slice(0, 6).map(d => `
-                <div class="animate-fade-in">
-                    <div class="flex justify-between text-[11px] font-bold mb-1">
-                        <span class="truncate pr-4 text-slate-600 font-mono tracking-tight">${d.domain}</span>
-                        <span class="text-slate-400">${d.count} 次</span>
-                    </div>
-                    <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                        <div class="bg-sky-400 h-full rounded-full transition-all duration-1000" style="width: ${Math.max(5, (d.count/max)*100)}%"></div>
+            <!-- 分布图表排 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col h-64">
+                    <h3 class="text-sm font-medium text-gray-200 mb-2">APP 统计分布</h3>
+                    <div class="flex-1 relative">
+                        <canvas id="appUsageChart"></canvas>
                     </div>
                 </div>
-            `).join('');
-        }
+                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col h-64">
+                    <h3 class="text-sm font-medium text-gray-200 mb-2">活跃域名</h3>
+                    <div class="flex-1 overflow-y-auto space-y-2" id="domains-list">
+                    </div>
+                </div>
+            </div>
 
-        // 文件上传与更新
-        document.getElementById('oaf-update-btn').onclick = async function() {
-            const fileInput = document.getElementById('oaf-file');
-            if (fileInput.files.length === 0) return alert('请先选择文件');
+        </div>
 
-            const btn = this;
-            const originalHTML = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> 处理中...`;
-            lucide.createIcons();
-
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-
-            try {
-                const res = await fetch(`${API_OAF}/upload`, { method: 'POST', body: formData });
-                const result = await res.json();
-                if (result.success) {
-                    alert('更新成功！服务正在重启...');
-                    setTimeout(() => location.reload(), 3000);
-                } else {
-                    alert('错误: ' + result.error);
-                }
-            } catch (e) {
-                alert('网络异常: ' + e.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalHTML;
-                lucide.createIcons();
-            }
-        };
-
-        document.getElementById('oaf-upload-zone').onclick = () => document.getElementById('oaf-file').click();
-
-        // 生命周期管理
-        window.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
-            initCharts();
+        <!-- 右侧 系统面板区 -->
+        <div class="w-full lg:w-72 flex flex-col gap-4 shrink-0">
             
-            // 立即触发
-            loadSysInfo();
-            loadNetInfo();
-            loadOafStatus();
-            loadDomains();
+            <!-- 系统信息 -->
+            <div class="bg-bgPanel rounded p-4 border border-borderMain">
+                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">系统信息</h3>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between"><span class="text-textMuted">主机名</span><span class="text-gray-300" id="sys-hostname">-</span></div>
+                    <div class="flex justify-between"><span class="text-textMuted">设备型号</span><span class="text-gray-300" id="sys-model">-</span></div>
+                    <div class="flex justify-between"><span class="text-textMuted">固件版本</span><span class="text-gray-300 font-mono" id="sys-firmware">-</span></div>
+                    <div class="flex justify-between"><span class="text-textMuted">内核版本</span><span class="text-gray-300 font-mono" id="sys-kernel">-</span></div>
+                    <div class="flex justify-between"><span class="text-textMuted">运行时间</span><span class="text-gray-300" id="sys-uptime">-</span></div>
+                </div>
+            </div>
 
-            // 定时刷新周期
-            setInterval(loadSysInfo, 3000);
-            setInterval(updateTraffic, 1500);
-            setInterval(loadNetInfo, 10000);
-            setInterval(loadOafStatus, 15000);
-            setInterval(loadDomains, 20000);
-        });
-    </script>
+            <!-- 运行状态 Dials -->
+            <div class="bg-bgPanel rounded p-4 border border-borderMain">
+                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">运行状态</h3>
+                <div class="flex justify-around items-center pt-2">
+                    <div class="relative w-16 h-16">
+                        <canvas id="cpuDial"></canvas>
+                        <div class="chart-center-text text-[10px] text-gray-200" id="cpu-text">0%</div>
+                        <div class="text-center text-xxs text-textMuted mt-1 absolute -bottom-5 w-full">CPU</div>
+                    </div>
+                    <div class="relative w-16 h-16">
+                        <canvas id="memDial"></canvas>
+                        <div class="chart-center-text text-[10px] text-gray-200" id="mem-text">0%</div>
+                        <div class="text-center text-xxs text-textMuted mt-1 absolute -bottom-5 w-full">内存</div>
+                    </div>
+                </div>
+                <div class="h-6"></div>
+            </div>
+
+            <!-- 温度 -->
+            <div class="bg-bgPanel rounded p-4 border border-borderMain">
+                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">温度</h3>
+                <div class="flex items-center justify-between text-xs mb-1">
+                    <span class="text-textMuted">CPU</span>
+                    <span class="text-gray-300" id="cpu-temp">-</span>
+                </div>
+                <div class="w-full bg-bgBase rounded-full h-1 border border-borderMain overflow-hidden">
+                    <div id="temp-bar" class="bg-accentOrange h-full transition-all duration-500 w-0"></div>
+                </div>
+            </div>
+
+            <!-- 网络面板 -->
+            <div class="bg-bgPanel rounded p-4 border border-borderMain">
+                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">网络</h3>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between"><span class="text-textMuted">LAN IP</span><span class="text-gray-300" id="lan-ip">-</span></div>
+                    <div class="flex justify-between"><span class="text-textMuted">WAN IP</span><span class="text-gray-300" id="wan-ip">-</span></div>
+                </div>
+            </div>
+
+            <!-- 在线设备简表 -->
+            <div class="bg-bgPanel rounded p-4 border border-borderMain flex-1">
+                <h3 class="text-sm font-medium text-gray-200 mb-3 border-b border-borderMain pb-2">在线设备</h3>
+                <div class="space-y-2 overflow-y-auto max-h-48" id="devices-list">
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
+
+<script>
+    const API_BASE = '<%=url("admin/dashboard/api")%>';
+    const API_OAF = '/cgi-bin/luci/api/oaf';
+
+    // 格式化与基础工具
+    const formatBytes = (bytes) => {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+    const formatUptime = (s) => {
+        if (!s) return '-';
+        const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+        return `${d > 0 ? d + 'd ' : ''}${h}h ${m}m`;
+    };
+    async function apiRequest(ep, base = API_BASE) {
+        try { const res = await fetch(`${base}/${ep}`, { credentials: 'same-origin' }); return res.ok ? await res.json() : null; } catch (e) { return null; }
+    }
+
+    // Chart.js 全局配置
+    Chart.defaults.color = '#9ca3af';
+    Chart.defaults.borderColor = '#374151';
+
+    // 1. 流量图表
+    const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+    const MAX_POINTS = 40;
+    let trafficLabels = Array(MAX_POINTS).fill('');
+    let dataDown = Array(MAX_POINTS).fill(0);
+    let dataUp = Array(MAX_POINTS).fill(0);
+
+    const trafficChart = new Chart(trafficCtx, {
+        type: 'line',
+        data: {
+            labels: trafficLabels,
+            datasets: [
+                { label: '下行', data: dataDown, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 },
+                { label: '上行', data: dataUp, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { display: false }, y: { grid: { color: '#2d2e34' }, ticks: { font: { size: 10 } } } },
+            animation: false
+        }
+    });
+
+    let prevTx = 0, prevRx = 0, prevTime = 0;
+    async function refreshTraffic() {
+        const data = await apiRequest('traffic');
+        if (data) {
+            const now = Date.now();
+            if (prevTime !== 0) {
+                const diff = (now - prevTime) / 1000;
+                const upSpeed = (data.tx_bytes - prevTx) / diff;
+                const downSpeed = (data.rx_bytes - prevRx) / diff;
+                dataUp.push(upSpeed); dataDown.push(downSpeed);
+                dataUp.shift(); dataDown.shift();
+                trafficChart.update();
+                document.getElementById('cur-up-speed').innerText = formatBytes(upSpeed) + '/s';
+                document.getElementById('cur-down-speed').innerText = formatBytes(downSpeed) + '/s';
+            }
+            document.getElementById('total-up').innerText = formatBytes(data.tx_bytes);
+            document.getElementById('total-down').innerText = formatBytes(data.rx_bytes);
+            prevTx = data.tx_bytes; prevRx = data.rx_bytes; prevTime = now;
+        }
+    }
+
+    // 2. Dials (CPU/Mem)
+    const cpuDial = new Chart(document.getElementById('cpuDial').getContext('2d'), {
+        type: 'doughnut', data: { datasets: [{ data: [0, 100], backgroundColor: ['#10b981', '#2d2e34'], borderWidth: 0 }] },
+        options: { responsive: true, cutout: '85%', plugins: { tooltip: false } }
+    });
+    const memDial = new Chart(document.getElementById('memDial').getContext('2d'), {
+        type: 'doughnut', data: { datasets: [{ data: [0, 100], backgroundColor: ['#3b82f6', '#2d2e34'], borderWidth: 0 }] },
+        options: { responsive: true, cutout: '85%', plugins: { tooltip: false } }
+    });
+
+    // 3. App Usage / Distribution
+    const appUsageChart = new Chart(document.getElementById('appUsageChart').getContext('2d'), {
+        type: 'doughnut', data: { labels: ['视频', '下载', '聊天', '购物'], datasets: [{ data: [40, 30, 20, 10], backgroundColor: ['#10b981','#8b5cf6','#3b82f6','#f97316'], borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } } }
+    });
+
+    // 4. Data Loading
+    async function loadSysInfo() {
+        const data = await apiRequest('sysinfo');
+        if (data) {
+            document.getElementById('sys-hostname').innerText = data.model || 'FanchmWrt';
+            document.getElementById('sys-model').innerText = data.model || '-';
+            document.getElementById('sys-firmware').innerText = data.firmware;
+            document.getElementById('sys-kernel').innerText = data.kernel;
+            document.getElementById('sys-uptime').innerText = formatUptime(data.uptime_raw);
+            document.getElementById('cpu-text').innerText = data.cpuUsage + '%';
+            cpuDial.data.datasets[0].data = [data.cpuUsage, 100 - data.cpuUsage]; cpuDial.update();
+            document.getElementById('mem-text').innerText = data.memUsage + '%';
+            memDial.data.datasets[0].data = [data.memUsage, 100 - data.memUsage]; memDial.update();
+            document.getElementById('cpu-temp').innerText = (data.temp > 0 ? data.temp + '°C' : '-');
+            document.getElementById('temp-bar').style.width = Math.min(data.temp, 100) + '%';
+        }
+    }
+
+    async function loadNetInfo() {
+        const data = await apiRequest('netinfo');
+        if (data) {
+            const statusText = document.getElementById('wan-status-text');
+            if (data.wanStatus === 'up') {
+                statusText.innerText = '已联网';
+                statusText.className = 'text-accentGreen font-semibold text-sm';
+            } else {
+                statusText.innerText = '未连接';
+                statusText.className = 'text-red-500 font-semibold text-sm';
+            }
+            document.getElementById('lan-ip').innerText = data.lanIp || '-';
+            document.getElementById('wan-ip').innerText = data.wanIp || '-';
+            if (document.getElementById('conn-count')) {
+                document.getElementById('conn-count').innerText = data.connCount || '-';
+            }
+        }
+    }
+
+    async function loadDevices() {
+        const devices = await apiRequest('devices');
+        if (!devices) return;
+        document.getElementById('active-device-count').innerText = devices.filter(d => d.active).length;
+        const html = devices.slice(0, 10).map(dev => `
+            <div class="flex items-center justify-between text-xxs group">
+                <span class="text-gray-400 truncate w-32">${dev.name || dev.mac}</span>
+                <span class="text-textMuted font-mono">${dev.ip}</span>
+                <span class="w-1.5 h-1.5 rounded-full ${dev.active ? 'bg-accentGreen' : 'bg-gray-600'}"></span>
+            </div>
+        `).join('');
+        document.getElementById('devices-list').innerHTML = html;
+        lucide.createIcons();
+    }
+
+    async function loadDomains() {
+        const data = await apiRequest('domains');
+        if (!data || !data.top) return;
+        const max = data.top[0] ? data.top[0].count : 1;
+        const html = data.top.slice(0, 8).map(item => `
+            <div class="space-y-1">
+                <div class="flex justify-between text-xxs"><span class="truncate w-40 font-mono">${item.domain}</span><span class="text-accentBlue">${item.count}</span></div>
+                <div class="w-full bg-bgBase h-0.5"><div class="bg-accentBlue h-full" style="width: ${(item.count/max)*100}%"></div></div>
+            </div>
+        `).join('');
+        document.getElementById('domains-list').innerHTML = html;
+    }
+
+    async function loadOafStatus() {
+        const data = await apiRequest('status', API_OAF);
+        if (data) {
+            document.getElementById('oaf-version').innerText = data.current_version || '-';
+            document.getElementById('oaf-engine').innerText = data.engine || '-';
+        }
+
+        // 动态加载活跃 APP 列表 (基于最新后端修复)
+        const appsData = await apiRequest('oaf/collect_usage_overview');
+        const listEl = document.getElementById('oaf-apps-list');
+        if (appsData && appsData.apps && appsData.apps.length > 0) {
+            const colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-cyan-500'];
+            const icons = ['play', 'message-square', 'download', 'shopping-cart', 'globe'];
+            listEl.innerHTML = appsData.apps.slice(0, 10).map((app, i) => `
+                <div class="flex flex-col items-center gap-1 w-10 group cursor-help" title="${app.name}">
+                    <div class="w-8 h-8 rounded ${colors[i % colors.length]} flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
+                        <i data-lucide="${icons[i % icons.length]}" class="w-4 h-4"></i>
+                    </div>
+                    <span class="text-xxs text-textMuted truncate w-full text-center">${app.name}</span>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        } else if (listEl) {
+            listEl.innerHTML = '<span class="text-xxs text-textMuted italic">暂无活跃应用数据</span>';
+        }
+    }
+
+    async function uploadOafFeature() {
+        const fileInput = document.getElementById('oaf-file-input');
+        if (!fileInput.files[0]) return;
+        const formData = new FormData(); formData.append('file', fileInput.files[0]);
+        const btn = document.getElementById('oaf-upload-btn');
+        const progress = document.getElementById('oaf-progress-container');
+        const bar = document.getElementById('oaf-bar');
+        btn.disabled = true; progress.classList.remove('hidden');
+        const xhr = new XMLHttpRequest(); xhr.open('POST', `${API_OAF}/upload`, true);
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) { bar.style.width = Math.round((e.loaded/e.total)*100) + '%'; } };
+        xhr.onload = () => { setTimeout(() => location.reload(), 2000); };
+        xhr.send(formData);
+    }
+
+    // 初始化
+    loadSysInfo(); loadNetInfo(); loadDevices(); loadDomains(); loadOafStatus();
+    lucide.createIcons();
+    setInterval(refreshTraffic, 3000);
+    setInterval(loadDevices, 15000);
+</script>
 <%+footer%>
