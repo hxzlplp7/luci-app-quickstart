@@ -8,6 +8,8 @@ local http       = require "luci.http"
 local util       = require "luci.util"
 local jsonc      = require "luci.jsonc"
 local d          = require "luci.dispatcher"
+local fs         = require "nixio.fs"
+local sys        = require "luci.sys"
 local _          = require "luci.i18n".translate
 
 -- 定义模块表 (兼容 Lua 5.1/5.4)
@@ -437,7 +439,7 @@ local function api_sysinfo()
     end
 
     local t1, b1 = get_cpu_jiffies()
-    luci.sys.call("sleep 0.05") -- 短暂采样
+    sys.call("sleep 0.05") -- 短暂采样
     local t2, b2 = get_cpu_jiffies()
 
     local cpuUsage = 0
