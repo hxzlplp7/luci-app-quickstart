@@ -60,11 +60,11 @@
                     <div class="text-gray-200 font-semibold text-xl" id="conn-count">-</div>
                 </div>
                 <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
-                    <div class="text-xs text-textMuted mb-1">今日下载</div>
+                    <div class="text-xs text-textMuted mb-1">累计下载</div>
                     <div class="text-gray-200 font-semibold text-sm truncate" id="total-down">-</div>
                 </div>
                 <div class="bg-bgPanel rounded p-4 flex flex-col justify-center border border-borderMain">
-                    <div class="text-xs text-textMuted mb-1">今日上传</div>
+                    <div class="text-xs text-textMuted mb-1">累计上传</div>
                     <div class="text-gray-200 font-semibold text-sm truncate" id="total-up">-</div>
                 </div>
             </div>
@@ -223,6 +223,7 @@
 <script>
     const API_BASE = '<%=url("admin/dashboard/api")%>';
     const API_OAF = '<%=url("admin/dashboard/api/oaf")%>'; // 适配统一路由映射
+    const LUCI_TOKEN = (window.L && L.env && L.env.token) ? L.env.token : '';
 
     // 基础工具与安全性增强
     const escapeHtml = (str) => {
@@ -281,9 +282,13 @@
         if (data) {
             const now = Date.now();
             if (prevTime !== 0) {
-                const diff = (now - prevTime) / 1000;
-                const upSpeed = (data.tx_bytes - prevTx) / diff;
-                const downSpeed = (data.rx_bytes - prevRx) / diff;
+                const diff = Math.max((now - prevTime) / 1000, 1);
+                if (data.tx_bytes < prevTx || data.rx_bytes < prevRx) {
+                    prevTx = data.tx_bytes; prevRx = data.rx_bytes; prevTime = now;
+                    return;
+                }
+                const upSpeed = Math.max(0, (data.tx_bytes - prevTx) / diff);
+                const downSpeed = Math.max(0, (data.rx_bytes - prevRx) / diff);
                 dataUp.push(upSpeed); dataDown.push(downSpeed);
                 dataUp.shift(); dataDown.shift();
                 trafficChart.update();
@@ -316,7 +321,7 @@
     async function loadSysInfo() {
         const data = await apiRequest('sysinfo');
         if (data) {
-            document.getElementById('sys-hostname').innerText = data.model || 'FanchmWrt';
+            document.getElementById('sys-hostname').innerText = data.hostname || '-';
             document.getElementById('sys-model').innerText = data.model || '-';
             document.getElementById('sys-firmware').innerText = data.firmware;
             document.getElementById('sys-kernel').innerText = data.kernel;
@@ -385,6 +390,12 @@
             document.getElementById('oaf-version').innerText = data.current_version || '-';
             document.getElementById('oaf-engine').innerText = data.engine || '-';
 
+            if (data.class_stats && data.class_stats.length > 0) {
+                appUsageChart.data.labels = data.class_stats.map(item => item.name || '-');
+                appUsageChart.data.datasets[0].data = data.class_stats.map(item => item.time || 0);
+                appUsageChart.update();
+            }
+
             // 动态加载活跃 APP 列表 (基于 backend 返回的 active_apps)
             if (data.active_apps && data.active_apps.length > 0) {
                 const colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-cyan-500'];
@@ -415,12 +426,14 @@
             return;
         }
         // 2. 格式预检
-        if (!file.name.match(/\.(dat|bin|zip)$/i)) {
-            alert('文件格式错误：请上传 .dat, .bin 或 .zip 格式的特征库');
+        if (!file.name.match(/\.(bin|zip)$/i)) {
+            alert('文件格式错误：请上传 .bin 或 .zip 格式的特征库');
             return;
         }
 
-        const formData = new FormData(); formData.append('file', file);
+        const formData = new FormData();
+        formData.append('token', LUCI_TOKEN);
+        formData.append('file', file);
         const btn = document.getElementById('oaf-upload-btn');
         const progress = document.getElementById('oaf-progress-container');
         const bar = document.getElementById('oaf-bar');
@@ -464,6 +477,7 @@
 
     // 初始化与事件绑定
     window.addEventListener('load', () => {
+        refreshTraffic();
         loadSysInfo(); 
         loadNetInfo(); 
         loadDevices(); 

@@ -17,7 +17,7 @@ local M = {}
 
 function M.index()
     d.entry({ "admin", "dashboard" }, d.call("dashboard_dispatch"), _("Dashboard"), 0).leaf = true
-    d.entry({ "dashboard-api" }, d.call("dashboard_api")).leaf = true
+    d.entry({ "admin", "dashboard", "api" }, d.call("dashboard_dispatch")).leaf = true
 end
 
 -- =====================================================================
@@ -145,8 +145,9 @@ local function has_default_route(status)
 end
 
 local function read_ipv4_from_device(dev)
-    if not dev or dev == "" or dev == " " then return "" end
-    local s = exec_trim("ip -4 addr show dev " .. dev .. " 2>/dev/null | awk '/inet / {print $2; exit}' | cut -d/ -f1")
+    dev = trim(dev)
+    if dev == "" then return "" end
+    local s = exec_trim("ip -4 addr show dev " .. shell_quote(dev) .. " | awk '/inet / {print $2; exit}' | cut -d/ -f1")
     return s
 end
 
@@ -402,13 +403,18 @@ local function api_sysinfo()
     if model == "" then model = exec_trim("cat /proc/device-tree/model 2>/dev/null | tr -d '\\0'") end
     if model == "" then model = "Generic Device" end
 
+    local hostname = ""
+    if type(boardinfo) == "table" and boardinfo.hostname then hostname = trim(boardinfo.hostname) end
+    if hostname == "" then hostname = trim(read_line("/proc/sys/kernel/hostname") or "") end
+    if hostname == "" then hostname = exec_trim("uci -q get system.@system[0].hostname") end
+
     local release  = read_all("/etc/openwrt_release") or ""
     local firmware = release:match("DISTRIB_DESCRIPTION='([^']*)'")
         or release:match('DISTRIB_DESCRIPTION="([^"]*)"')
+        or release:match('DISTRIB_DESCRIPTION=([^%s]*)')
         or "OpenWrt"
 
-    local kernel   = exec_trim("uname -r")
-    if kernel == "" then kernel = "unknown" end
+    local kernel = read_line("/proc/sys/kernel/osrelease") or "Unknown"
 
     local temp = 0
     for i = 0, 9 do
@@ -467,6 +473,7 @@ local function api_sysinfo()
 
     http.prepare_content("application/json")
     http.write(jsonc.stringify({
+        hostname    = hostname,
         model       = model,
         firmware    = firmware,
         kernel      = kernel,
@@ -475,7 +482,7 @@ local function api_sysinfo()
         uptime_raw  = uptime_raw,
         cpuUsage    = cpuUsage,
         memUsage    = memUsage,
-        hasSamba4   = hasSamba4
+        samba       = hasSamba4,
     }))
 end
 
@@ -661,10 +668,10 @@ local LOCAL_API = {
         local sub  = path:match("/dashboard/api/oaf/([^/?#]+)")
         local ok, oaf = pcall(require, "luci.controller.api.oaf")
         if ok and oaf then
-            if sub == "status" and type(oaf.api_oaf_status) == "function" then
-                return oaf.api_oaf_status()
-            elseif sub == "upload" and type(oaf.api_oaf_upload) == "function" then
-                return oaf.api_oaf_upload()
+            if sub == "status" and type(oaf.action_status) == "function" then
+                return oaf.action_status()
+            elseif sub == "upload" and type(oaf.action_upload) == "function" then
+                return oaf.action_upload()
             end
         end
         http.prepare_content("application/json")

@@ -235,6 +235,7 @@ local function collect_device_macs()
                 macs[#macs+1] = m
             end
         end
+        devs = list
     end
     
     return macs, devs
@@ -252,14 +253,11 @@ local function collect_usage_overview(catalog)
     local now = os.time()
     local macs, visit_devices = collect_device_macs()
     local recent_apps = {}
-    local usage_by_app = {}
-    local class_totals = {}
-
     for _, device in ipairs(visit_devices) do
+        local device_mac = trim((device.mac or device.mac_addr or "")):upper()
         for _, visit in ipairs(device.visit_info or {}) do
             local app_id = tonumber(visit.appid or visit.id)
             local app_info = app_id and catalog.apps[app_id] or nil
-
             if app_info then
                 local entry = recent_apps[app_id] or {
                     id = app_id,
@@ -268,20 +266,32 @@ local function collect_usage_overview(catalog)
                     class_label = app_info.class_label,
                     latest_time = 0,
                     devices = 0,
+                    _device_seen = {},
                 }
 
                 local latest_time = tonumber(visit.latest_time or visit.lt or 0) or 0
-                if latest_time > (entry.latest_time or 0) then
+                if latest_time > entry.latest_time then
                     entry.latest_time = latest_time
                 end
 
-                entry.devices = (entry.devices or 0) + 1
+                if device_mac ~= "" then
+                    if not entry._device_seen[device_mac] then
+                        entry._device_seen[device_mac] = true
+                        entry.devices = (entry.devices or 0) + 1
+                    end
+                else
+                    entry.devices = (entry.devices or 0) + 1
+                end
+
                 if app_id then
                     recent_apps[app_id] = entry
                 end
             end
         end
     end
+
+    local usage_by_app = {}
+    local class_totals = {}
 
     for _, mac in ipairs(macs) do
         local visit_time = call_appfilter("dev_visit_time", { mac = mac }) or {}
@@ -344,6 +354,7 @@ local function collect_usage_overview(catalog)
         item.time = usage and usage.time or 0
         item.icon = icon_url_for(app_id)
         item.last_seen = math.max(0, now - (item.latest_time or 0))
+        item._device_seen = nil
         active_apps[#active_apps + 1] = item
     end
 
@@ -547,22 +558,54 @@ M.action_status = function()
     http.write(json.stringify(build_status_response()))
 end
 
+M.api_oaf_status = M.action_status
+
 M.action_upload = function()
+    if http.getenv("REQUEST_METHOD") ~= "POST" then
+        http.status(405, "Method Not Allowed")
+        http.prepare_content("application/json")
+        http.write(json.stringify({
+            success = false,
+            message = "Method Not Allowed",
+        }))
+        return
+    end
+
     cleanup_tmp()
     ensure_dir(TMP_ROOT)
 
     local upload_name = nil
     local upload_path = nil
     local upload_fd = nil
+    local upload_size = 0
+    local upload_error = nil
 
     http.setfilehandler(function(meta, chunk, eof)
+        if upload_error then
+            return
+        end
+
         if meta and meta.name == "file" and not upload_path then
             upload_name = basename(meta.file)
             upload_path = TMP_ROOT .. "/" .. upload_name
             upload_fd = io.open(upload_path, "w")
+            if not upload_fd then
+                upload_error = "无法创建临时文件。"
+                return
+            end
         end
 
         if upload_fd and chunk and #chunk > 0 then
+            upload_size = upload_size + #chunk
+            if upload_size > MAX_SIZE then
+                upload_error = "上传文件过大，请选择 32MB 以内的特征包。"
+                upload_fd:close()
+                upload_fd = nil
+                if upload_path then
+                    sys.call("rm -f " .. shell_quote(upload_path) .. " >/dev/null 2>&1")
+                end
+                return
+            end
             upload_fd:write(chunk)
         end
 
@@ -575,6 +618,27 @@ M.action_upload = function()
     http.formvalue("file")
     http.prepare_content("application/json")
 
+    local token = trim(http.formvalue("token") or "")
+    local expected = trim((d.context and d.context.authtoken) or "")
+    if expected ~= "" and token ~= expected then
+        cleanup_tmp()
+        http.status(403, "Forbidden")
+        http.write(json.stringify({
+            success = false,
+            message = "非法请求，CSRF Token 验证失败。",
+        }))
+        return
+    end
+
+    if upload_error then
+        cleanup_tmp()
+        http.write(json.stringify({
+            success = false,
+            message = upload_error,
+        }))
+        return
+    end
+
     if not upload_path or not path_exists(upload_path) then
         cleanup_tmp()
         http.write(json.stringify({
@@ -584,7 +648,7 @@ M.action_upload = function()
         return
     end
 
-    local upload_size = stat_size(upload_path)
+    upload_size = stat_size(upload_path)
     if upload_size <= 0 then
         cleanup_tmp()
         http.write(json.stringify({
