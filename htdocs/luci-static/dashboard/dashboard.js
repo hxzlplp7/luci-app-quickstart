@@ -1,11 +1,11 @@
 (function(window, document) {
     'use strict';
 
-    // 状态配置 (由模板注入)
-    const options = window.DashboardOptions || {};
-    const API_BASE = options.apiBase;
-    const API_OAF = options.apiOaf;
-    const LUCI_TOKEN = options.token;
+    // 状态配置 (从 data-* 属性读取，避免内联脚本违反 CSP)
+    const configEl = document.getElementById('dashboard-config');
+    const API_BASE = configEl ? configEl.dataset.apiBase : '';
+    const API_OAF = configEl ? configEl.dataset.apiOaf : '';
+    const LUCI_TOKEN = (window.L && L.env && L.env.token) ? L.env.token : '';
 
     // 基础工具与安全性增强
     const escapeHtml = (str) => {

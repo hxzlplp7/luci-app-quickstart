@@ -192,13 +192,10 @@
     </div>
 </div>
 
-<script>
-    // 运行时参数桥接 (由 LuCI 模板渲染生成)
-    window.DashboardOptions = {
-        apiBase: '<%=url("admin/dashboard/api")%>',
-        apiOaf:  '<%=url("admin/dashboard/api/oaf")%>',
-        token:   (window.L && L.env && L.env.token) ? L.env.token : ''
-    };
-</script>
+<!-- 运行时参数桥接：通过 data-* 属性传递，避免内联脚本违反 CSP -->
+<div id="dashboard-config" class="hidden"
+    data-api-base="<%=url("admin/dashboard/api")%>"
+    data-api-oaf="<%=url("admin/dashboard/api/oaf")%>">
+</div>
 <script src="/luci-static/dashboard/dashboard.js"></script>
 <%+footer%>
