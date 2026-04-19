@@ -104,10 +104,10 @@
 
             <!-- 分布图表排 -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col h-64">
+                <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col h-64 overflow-hidden">
                     <h3 class="text-sm font-medium text-gray-200 mb-2">APP 统计分布</h3>
-                    <div class="flex-1 relative">
-                        <canvas id="appUsageChart"></canvas>
+                    <div class="flex-1 relative min-h-0">
+                        <canvas id="appUsageChart" class="absolute inset-0 w-full h-full"></canvas>
                     </div>
                 </div>
                 <div class="bg-bgPanel rounded p-4 border border-borderMain flex flex-col h-64">

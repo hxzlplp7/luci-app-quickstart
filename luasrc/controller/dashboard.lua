@@ -9,7 +9,6 @@ local util       = require "luci.util"
 local jsonc      = require "luci.jsonc"
 local d          = require "luci.dispatcher"
 local fs         = require "nixio.fs"
-local sys        = require "luci.sys"
 local _          = require "luci.i18n".translate
 
 -- 定义模块表 (兼容 Lua 5.1/5.4)
@@ -152,13 +151,18 @@ local function read_ipv4_from_device(dev)
 end
 
 local function proactive_ping_check()
-    -- 使用极短的 1秒超时进行主动探测，首选国内镜像，备选 8.8.8.8
     local ok = os.execute("ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1")
     if ok == 0 or ok == true then return true end
-    
+
     ok = os.execute("ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1")
     if ok == 0 or ok == true then return true end
-    
+
+    ok = os.execute("nslookup www.baidu.com 223.5.5.5 >/dev/null 2>&1")
+    if ok == 0 or ok == true then return true end
+
+    ok = os.execute("wget -q --spider -T 2 http://connectivitycheck.platform.hicloud.com/generate_204 >/dev/null 2>&1")
+    if ok == 0 or ok == true then return true end
+
     return false
 end
 
@@ -426,7 +430,9 @@ local function api_sysinfo()
         end
     end
 
-    -- CPU 使用率：基于 /proc/stat 的差分采样法 (解决 loadavg 不准问题)
+    -- CPU 使用率：跨请求差分采样法，利用轮询间隔（10s）作为采样窗口
+    local CPU_STATE_FILE = "/tmp/.dashboard_cpu_state"
+
     local function get_cpu_jiffies()
         local stat = fs.readfile("/proc/stat")
         if stat then
@@ -440,13 +446,25 @@ local function api_sysinfo()
         return 0, 0
     end
 
-    local t1, b1 = get_cpu_jiffies()
-    sys.call("sleep 0.05") -- 短暂采样
-    local t2, b2 = get_cpu_jiffies()
-
     local cpuUsage = 0
-    if t2 > t1 then
-        cpuUsage = math.floor(((b2 - b1) / (t2 - t1)) * 100)
+    local t_now, b_now = get_cpu_jiffies()
+
+    local prev_state = read_line(CPU_STATE_FILE)
+    if prev_state then
+        local t_prev, b_prev = prev_state:match("^(%d+)%s+(%d+)")
+        t_prev = tonumber(t_prev) or 0
+        b_prev = tonumber(b_prev) or 0
+        if t_now > t_prev then
+            cpuUsage = math.floor(((b_now - b_prev) / (t_now - t_prev)) * 100)
+            if cpuUsage < 0 then cpuUsage = 0 end
+            if cpuUsage > 100 then cpuUsage = 100 end
+        end
+    end
+
+    local sf = io.open(CPU_STATE_FILE, "w")
+    if sf then
+        sf:write(tostring(t_now) .. " " .. tostring(b_now))
+        sf:close()
     end
 
     local ustr       = read_line("/proc/uptime") or "0"
@@ -682,6 +700,7 @@ M.dashboard_dispatch = function()
     if endpoint then
         local sid, _ = check_session()
         if not sid then
+            http.status(403, "Forbidden")
             http.prepare_content("application/json")
             http.write('{"error":"Forbidden","code":-1001}')
             return
@@ -702,75 +721,6 @@ M.dashboard_dispatch = function()
         require("luci.template").render("dashboard/main", {
             prefix = d.build_url("admin", "dashboard")
         })
-    end
-end
-
--- =====================================================================
--- Vue-bundle Code Table
--- =====================================================================
-
-local ROUTES = {
-    ["GET:/u/network/status/"]              = { "api_network", "status" },
-    ["GET:/u/network/statistics/"]          = { "api_network", "statistics" },
-    ["GET:/network/device/list/"]           = { "api_network", "device_list" },
-    ["GET:/network/port/list/"]             = { "api_network", "port_list" },
-    ["GET:/network/interface/config/"]      = { "api_network", "interface_config_get" },
-    ["POST:/network/interface/config/"]     = { "api_network", "interface_config_post" },
-    ["POST:/network/checkPublicNet/"]       = { "api_network", "check_public_net" },
-    ["GET:/system/status/"]                 = { "api_system", "status" },
-    ["GET:/u/system/version/"]              = { "api_system", "version" },
-    ["POST:/system/reboot/"]                = { "api_system", "reboot" },
-    ["GET:/guide/dns-config/"]              = { "api_guide", "dns_config_get" },
-    ["POST:/guide/dns-config/"]             = { "api_guide", "dns_config_post" },
-    ["GET:/u/guide/ddns/"]                  = { "api_guide", "ddns_get" },
-    ["POST:/u/guide/ddns/"]                 = { "api_guide", "ddns_post" },
-    ["GET:/guide/docker/status/"]           = { "api_guide", "docker_status" },
-    ["GET:/guide/docker/partition/list/"]   = { "api_guide", "docker_partition_list" },
-    ["POST:/guide/docker/transfer/"]        = { "api_guide", "docker_transfer" },
-    ["POST:/guide/docker/switch/"]          = { "api_guide", "docker_switch" },
-    ["GET:/guide/download-service/status/"] = { "api_guide", "download_service_status" },
-    ["GET:/nas/disk/status/"]               = { "api_nas", "disk_status" },
-    ["GET:/u/nas/service/status/"]          = { "api_nas", "service_status" },
-    ["POST:/nas/linkease/enable/"]          = { "api_nas", "linkease_enable" },
-}
-
-M.dashboard_api = function()
-    local sid, _ = check_session()
-    if not sid then
-        http.prepare_content("application/json")
-        http.write('{"success":-1001,"error":"Forbidden"}')
-        return
-    end
-
-    local request_uri = http.getenv("REQUEST_URI") or ""
-    local method      = http.getenv("REQUEST_METHOD") or "GET"
-
-    local api_path    = request_uri:match("/dashboard%-api(/.*)") or "/"
-    api_path          = api_path:gsub("%?.*$", "")
-    if not api_path:match("/$") then api_path = api_path .. "/" end
-
-    local route = ROUTES[method .. ":" .. api_path]
-    if route then
-        local ok, mod = pcall(require, "luci.dashboard." .. route[1])
-        if ok and mod and type(mod[route[2]]) == "function" then
-            local ok2, err = pcall(mod[route[2]])
-            if not ok2 then
-                http.prepare_content("application/json")
-                http.write(jsonc.stringify({
-                    success = 500,
-                    error   = tostring(err),
-                }))
-            end
-        else
-            http.prepare_content("application/json")
-            http.write(jsonc.stringify({
-                success = 500,
-                error   = "Module load failed: " .. tostring(mod),
-            }))
-        end
-    else
-        http.prepare_content("application/json")
-        http.write('{"success":200,"result":{}}')
     end
 end
 

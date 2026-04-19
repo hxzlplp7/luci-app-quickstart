@@ -1,1 +1,5 @@
 .worktrees/
+.vscode/
+node_modules/
+*.zip
+feature3.0_cn_*/

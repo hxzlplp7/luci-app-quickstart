@@ -16,11 +16,6 @@ local TMP_ROOT = "/tmp/oaf-upload"
 local MAX_SIZE = 32 * 1024 * 1024
 local ACTIVE_WINDOW = 3600
 
-function M.index()
-    d.entry({ "api", "oaf", "status" }, d.call("action_status"), nil).sysauth = true
-    d.entry({ "api", "oaf", "upload" }, d.call("action_upload"), nil).sysauth = true
-end
-
 local function trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
@@ -79,6 +74,29 @@ local function call_appfilter(method, payload)
         return response
     end
     return nil
+end
+
+local function unwrap_response(resp)
+    if type(resp) ~= "table" then
+        return {}
+    end
+    if type(resp.data) == "table" then
+        return resp.data
+    end
+    return resp
+end
+
+local function extract_list(resp, ...)
+    local data = unwrap_response(resp)
+    for _, key in ipairs({...}) do
+        if type(data[key]) == "table" then
+            return data[key]
+        end
+    end
+    if data[1] ~= nil then
+        return data
+    end
+    return {}
 end
 
 local function parse_version_string(raw)
@@ -211,34 +229,35 @@ end
 local function collect_device_macs()
     local macs = {}
     local seen = {}
-    
-    -- 方法1: 尝试 visit_list (标准方法)
-    local visit_data = call_appfilter("visit_list", {}) or {}
-    local devs = visit_data.dev_list or visit_data.client_list or {}
-    
-    for _, device in ipairs(devs) do
-        local m = (device.mac or ""):upper()
-        if m ~= "" and not seen[m] then
-            seen[m] = true
-            macs[#macs+1] = m
+    local visit_devs = {}
+
+    local visit_raw = call_appfilter("visit_list", {})
+    if visit_raw then
+        visit_devs = extract_list(visit_raw, "dev_list", "client_list", "devices")
+        for _, device in ipairs(visit_devs) do
+            local m = (device.mac or device.mac_addr or ""):upper()
+            if m ~= "" and not seen[m] then
+                seen[m] = true
+                macs[#macs + 1] = m
+            end
         end
     end
 
-    -- 方法2: 补偿措施，如果 visit_list 为空，尝试直接获取设备列表
     if #macs == 0 then
-        local dev_data = call_appfilter("dev_list", {}) or call_appfilter("get_client_list", {}) or {}
-        local list = dev_data.dev_list or dev_data.client_list or {}
-        for _, dev in ipairs(list) do
-            local m = (dev.mac or ""):upper()
-            if m ~= "" and not seen[m] then
-                seen[m] = true
-                macs[#macs+1] = m
+        local dev_raw = call_appfilter("dev_list", {}) or call_appfilter("get_client_list", {})
+        if dev_raw then
+            local list = extract_list(dev_raw, "dev_list", "client_list", "devices")
+            for _, dev in ipairs(list) do
+                local m = (dev.mac or dev.mac_addr or ""):upper()
+                if m ~= "" and not seen[m] then
+                    seen[m] = true
+                    macs[#macs + 1] = m
+                end
             end
         end
-        devs = list
     end
-    
-    return macs, devs
+
+    return macs, visit_devs
 end
 
 local function icon_url_for(app_id)
@@ -254,8 +273,9 @@ local function collect_usage_overview(catalog)
     local macs, visit_devices = collect_device_macs()
     local recent_apps = {}
     for _, device in ipairs(visit_devices) do
+        if type(device) == "table" then
         local device_mac = trim((device.mac or device.mac_addr or "")):upper()
-        for _, visit in ipairs(device.visit_info or {}) do
+        for _, visit in ipairs(device.visit_info or device.visits or device.app_list or {}) do
             local app_id = tonumber(visit.appid or visit.id)
             local app_info = app_id and catalog.apps[app_id] or nil
             if app_info then
@@ -288,14 +308,16 @@ local function collect_usage_overview(catalog)
                 end
             end
         end
+        end -- if type(device) == "table"
     end
 
     local usage_by_app = {}
     local class_totals = {}
 
     for _, mac in ipairs(macs) do
-        local visit_time = call_appfilter("dev_visit_time", { mac = mac }) or {}
-        for _, item in ipairs(visit_time.list or {}) do
+        local visit_time_raw = call_appfilter("dev_visit_time", { mac = mac })
+        local visit_time_list = visit_time_raw and extract_list(visit_time_raw, "list", "app_list", "apps") or {}
+        for _, item in ipairs(visit_time_list) do
             local app_id = tonumber(item.id)
             local total_time = tonumber(item.t or item.time or item.total_time) or 0
             local app_info = app_id and catalog.apps[app_id] or nil
@@ -314,8 +336,9 @@ local function collect_usage_overview(catalog)
             end
         end
 
-        local class_time = call_appfilter("app_class_visit_time", { mac = mac }) or {}
-        for _, item in ipairs(class_time.class_list or {}) do
+        local class_time_raw = call_appfilter("app_class_visit_time", { mac = mac })
+        local class_time_list = class_time_raw and extract_list(class_time_raw, "class_list", "class_time_list", "classes") or {}
+        for _, item in ipairs(class_time_list) do
             local key = trim(item.name or item.type or "")
             local total_time = tonumber(item.visit_time) or 0
 
@@ -539,7 +562,7 @@ local function build_status_response()
 
     return {
         success = true,
-        available = (catalog.path ~= nil) or (next(active_apps) ~= nil) or (next(class_stats) ~= nil),
+        available = (catalog.app_count > 0) or (#active_apps > 0) or (#class_stats > 0),
         status = tonumber(data.engine_status or data.enable or 0) == 1 and "running" or "stopped",
         current_version = current_version,
         feature_format = catalog.format,
@@ -567,6 +590,20 @@ M.action_upload = function()
         http.write(json.stringify({
             success = false,
             message = "Method Not Allowed",
+        }))
+        return
+    end
+
+    -- 前置 CSRF 校验：从 URL 查询参数中读取 token，在解析 multipart body 之前完成验证
+    local qs_token = trim(http.getenv("QUERY_STRING") or ""):match("token=([^&]+)")
+    qs_token = qs_token and util.urldecode(qs_token) or ""
+    local expected = trim((d.context and d.context.authtoken) or "")
+    if expected == "" or qs_token ~= expected then
+        http.status(403, "Forbidden")
+        http.prepare_content("application/json")
+        http.write(json.stringify({
+            success = false,
+            message = "非法请求，CSRF Token 验证失败。",
         }))
         return
     end
@@ -617,18 +654,6 @@ M.action_upload = function()
 
     http.formvalue("file")
     http.prepare_content("application/json")
-
-    local token = trim(http.formvalue("token") or "")
-    local expected = trim((d.context and d.context.authtoken) or "")
-    if expected ~= "" and token ~= expected then
-        cleanup_tmp()
-        http.status(403, "Forbidden")
-        http.write(json.stringify({
-            success = false,
-            message = "非法请求，CSRF Token 验证失败。",
-        }))
-        return
-    end
 
     if upload_error then
         cleanup_tmp()

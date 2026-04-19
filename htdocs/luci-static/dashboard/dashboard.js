@@ -83,12 +83,10 @@
             const now = Date.now();
             if (prevTime !== 0) {
                 const diff = Math.max((now - prevTime) / 1000, 1);
-                if (data.tx_bytes < prevTx || data.rx_bytes < prevRx) {
-                    prevTx = data.tx_bytes; prevRx = data.rx_bytes; prevTime = now;
-                    return;
-                }
-                const upSpeed = Math.max(0, (data.tx_bytes - prevTx) / diff);
-                const downSpeed = Math.max(0, (data.rx_bytes - prevRx) / diff);
+                const txDelta = data.tx_bytes >= prevTx ? data.tx_bytes - prevTx : 0;
+                const rxDelta = data.rx_bytes >= prevRx ? data.rx_bytes - prevRx : 0;
+                const upSpeed = Math.max(0, txDelta / diff);
+                const downSpeed = Math.max(0, rxDelta / diff);
                 dataUp.push(upSpeed); dataDown.push(downSpeed);
                 dataUp.shift(); dataDown.shift();
                 trafficChart.update();
@@ -97,8 +95,10 @@
                 if (upEl) upEl.innerText = formatBytes(upSpeed) + '/s';
                 if (downEl) downEl.innerText = formatBytes(downSpeed) + '/s';
             }
-            document.getElementById('total-up').innerText = formatBytes(data.tx_bytes);
-            document.getElementById('total-down').innerText = formatBytes(data.rx_bytes);
+            const totalUp = document.getElementById('total-up');
+            const totalDown = document.getElementById('total-down');
+            if (totalUp) totalUp.innerText = formatBytes(data.tx_bytes);
+            if (totalDown) totalDown.innerText = formatBytes(data.rx_bytes);
             prevTx = data.tx_bytes; prevRx = data.rx_bytes; prevTime = now;
         }
     }
@@ -126,7 +126,7 @@
         const ctx = document.getElementById('appUsageChart');
         if (!ctx) return;
         appUsageChart = new Chart(ctx.getContext('2d'), {
-            type: 'doughnut', data: { labels: ['视频', '下载', '聊天', '购物'], datasets: [{ data: [40, 30, 20, 10], backgroundColor: ['#10b981','#8b5cf6','#3b82f6','#f97316'], borderWidth: 0 }] },
+            type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: ['#10b981','#8b5cf6','#3b82f6','#f97316','#ef4444','#eab308'], borderWidth: 0 }] },
             options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } } }
         });
     };
@@ -166,14 +166,14 @@
             return;
         }
         if (data.wanStatus === 'up') {
-            statusText.innerText = '已联网';
-            statusText.className = 'text-accentGreen font-semibold text-sm';
+            if (statusText) { statusText.innerText = '已联网'; statusText.className = 'text-accentGreen font-semibold text-sm'; }
         } else {
-            statusText.innerText = '未连接';
-            statusText.className = 'text-red-500 font-semibold text-sm';
+            if (statusText) { statusText.innerText = '未连接'; statusText.className = 'text-red-500 font-semibold text-sm'; }
         }
-        document.getElementById('lan-ip').innerText = data.lanIp || '-';
-        document.getElementById('wan-ip').innerText = data.wanIp || '-';
+        const lanEl = document.getElementById('lan-ip');
+        const wanEl = document.getElementById('wan-ip');
+        if (lanEl) lanEl.innerText = data.lanIp || '-';
+        if (wanEl) wanEl.innerText = data.wanIp || '-';
         if (document.getElementById('conn-count')) {
             document.getElementById('conn-count').innerText = data.connCount || '-';
         }
@@ -182,7 +182,8 @@
     async function loadDevices() {
         const devices = await apiRequest('devices');
         if (!devices) return;
-        document.getElementById('active-device-count').innerText = devices.filter(d => d.active).length;
+        const countEl = document.getElementById('active-device-count');
+        if (countEl) countEl.innerText = devices.filter(d => d.active).length;
         const html = devices.slice(0, 10).map(dev => `
             <div class="flex items-center justify-between text-xxs group">
                 <span class="text-gray-400 truncate w-32" title="${escapeHtml(dev.name || dev.mac)}">${escapeHtml(dev.name || dev.mac)}</span>
@@ -250,15 +251,18 @@
 
         if (data.active_apps && data.active_apps.length > 0) {
             const colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-cyan-500'];
-            const icons = ['play', 'message-square', 'download', 'shopping-cart', 'globe'];
-            listEl.innerHTML = data.active_apps.slice(0, 10).map((app, i) => `
-                <div class="flex flex-col items-center gap-1 w-10 group cursor-help" title="${escapeHtml(app.name)}">
+            listEl.innerHTML = data.active_apps.slice(0, 10).map((app, i) => {
+                const hasIcon = app.icon && !app.icon.includes('default.png');
+                const iconHtml = hasIcon
+                    ? `<img src="${escapeHtml(app.icon)}" class="w-5 h-5 object-contain" onerror="this.parentElement.innerHTML='<i data-lucide=\\'globe\\' class=\\'w-4 h-4\\'></i>'">`
+                    : `<i data-lucide="globe" class="w-4 h-4"></i>`;
+                return `<div class="flex flex-col items-center gap-1 w-10 group cursor-help" title="${escapeHtml(app.name)}">
                     <div class="w-8 h-8 rounded ${colors[i % colors.length]} flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
-                        <i data-lucide="${icons[i % icons.length]}" class="w-4 h-4"></i>
+                        ${iconHtml}
                     </div>
                     <span class="text-xxs text-textMuted truncate w-full text-center">${escapeHtml(app.name)}</span>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
             if (window.lucide) lucide.createIcons();
         } else if (listEl) {
             listEl.innerHTML = '<span class="text-xxs text-textMuted italic">暂无活跃应用数据</span>';
@@ -291,8 +295,8 @@
         if (window.lucide) lucide.createIcons();
         progress.classList.remove('hidden');
 
-        const xhr = new XMLHttpRequest(); 
-        xhr.open('POST', `${API_OAF}/upload`, true);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_OAF}/upload?token=${encodeURIComponent(LUCI_TOKEN)}`, true);
         xhr.upload.onprogress = (e) => { 
             if (e.lengthComputable) { bar.style.width = Math.round((e.loaded/e.total)*100) + '%'; } 
         };
@@ -343,9 +347,10 @@
         if (window.lucide) lucide.createIcons();
 
         setInterval(refreshTraffic, 3000);
-        setInterval(loadSysInfo, 10000);   // 系统信息每10秒更新
-        setInterval(loadNetInfo, 15000);   // 联网状态每15秒更新
-        setInterval(loadDevices, 15000);   // 设备列表每15秒更新
+        setInterval(loadSysInfo, 10000);
+        setInterval(loadNetInfo, 15000);
+        setInterval(loadDevices, 15000);
+        setInterval(loadOafStatus, 60000);
     };
 
     if (document.readyState === 'loading') {
