@@ -66,15 +66,7 @@
                         活跃APP
                     </h3>
                     <div class="flex flex-wrap gap-x-6 gap-y-4" id="oaf-apps-list">
-                        <!-- Mock Apps for Visuals -->
-                        <div class="flex flex-col items-center gap-1 w-10">
-                            <div class="w-8 h-8 rounded bg-green-500 flex items-center justify-center text-white"><i data-lucide="play" class="w-4 h-4"></i></div>
-                            <span class="text-xxs text-textMuted truncate w-full text-center">视频</span>
-                        </div>
-                        <div class="flex flex-col items-center gap-1 w-10">
-                            <div class="w-8 h-8 rounded bg-blue-500 flex items-center justify-center text-white"><i data-lucide="message-square" class="w-4 h-4"></i></div>
-                            <span class="text-xxs text-textMuted truncate w-full text-center">社交</span>
-                        </div>
+                        <!-- 由 JS 动态填充 -->
                     </div>
                 </div>
 
@@ -168,7 +160,8 @@
                     <span class="text-gray-300" id="cpu-temp">-</span>
                 </div>
                 <div class="w-full bg-bgBase rounded-full h-1 border border-borderMain overflow-hidden">
-                    <div id="temp-bar" class="bg-accentOrange h-full transition-all duration-500 w-0"></div>
+                    <!-- w-0 为初始状态，由 JS 通过 style.width 设置（不受 CSP 限制） -->
+                    <div id="temp-bar" class="bg-accentOrange h-full transition-all duration-500" style="width:0"></div>
                 </div>
             </div>
 

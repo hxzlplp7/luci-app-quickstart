@@ -2,8 +2,9 @@
     'use strict';
 
     // 状态配置：从当前页面 URL 自动推导 API 基址
-    // 当前页面路径形如 /cgi-bin/luci/admin/dashboard，直接追加 /api 即可
-    const pathMatch = window.location.pathname.match(/(.+\/admin\/dashboard)/);
+    // 匹配 /admin/dashboard 后确保不将子路径（如 /api）也匹配进去
+    const _rawPath = window.location.pathname.replace(/\/api(\/.*)?$/, '');
+    const pathMatch = _rawPath.match(/(.+\/admin\/dashboard)/);
     const API_BASE = pathMatch ? pathMatch[1] + '/api' : '';
     const API_OAF = API_BASE ? API_BASE + '/oaf' : '';
     const LUCI_TOKEN = (window.L && L.env && L.env.token) ? L.env.token : '';
@@ -91,8 +92,10 @@
                 dataUp.push(upSpeed); dataDown.push(downSpeed);
                 dataUp.shift(); dataDown.shift();
                 trafficChart.update();
-                document.getElementById('cur-up-speed').innerText = formatBytes(upSpeed) + '/s';
-                document.getElementById('cur-down-speed').innerText = formatBytes(downSpeed) + '/s';
+                const upEl = document.getElementById('cur-up-speed');
+                const downEl = document.getElementById('cur-down-speed');
+                if (upEl) upEl.innerText = formatBytes(upSpeed) + '/s';
+                if (downEl) downEl.innerText = formatBytes(downSpeed) + '/s';
             }
             document.getElementById('total-up').innerText = formatBytes(data.tx_bytes);
             document.getElementById('total-down').innerText = formatBytes(data.rx_bytes);
@@ -134,19 +137,20 @@
         if (data) {
             document.getElementById('sys-hostname').innerText = data.hostname || '-';
             document.getElementById('sys-model').innerText = data.model || '-';
-            document.getElementById('sys-firmware').innerText = data.firmware;
-            document.getElementById('sys-kernel').innerText = data.kernel;
+            document.getElementById('sys-firmware').innerText = data.firmware || '-';
+            document.getElementById('sys-kernel').innerText = data.kernel || '-';
             document.getElementById('sys-uptime').innerText = formatUptime(data.uptime_raw);
-            document.getElementById('cpu-text').innerText = data.cpuUsage + '%';
+            document.getElementById('cpu-text').innerText = (data.cpuUsage || 0) + '%';
             if (cpuDial) {
                 cpuDial.data.datasets[0].data = [data.cpuUsage, 100 - data.cpuUsage]; cpuDial.update();
             }
-            document.getElementById('mem-text').innerText = data.memUsage + '%';
+            document.getElementById('mem-text').innerText = (data.memUsage || 0) + '%';
             if (memDial) {
                 memDial.data.datasets[0].data = [data.memUsage, 100 - data.memUsage]; memDial.update();
             }
             document.getElementById('cpu-temp').innerText = (data.temp > 0 ? data.temp + '°C' : '-');
-            document.getElementById('temp-bar').style.width = Math.min(data.temp, 100) + '%';
+            const tempBar = document.getElementById('temp-bar');
+            if (tempBar) tempBar.style.width = Math.min(data.temp || 0, 100) + '%';
         }
     }
 
@@ -194,13 +198,22 @@
         const data = await apiRequest('domains');
         if (!data || !data.top) return;
         const max = data.top[0] ? data.top[0].count : 1;
-        const html = data.top.slice(0, 8).map(item => `
-            <div class="space-y-1">
+        // 进度条宽度通过 CSS 自定义属性注入，避免内联 style 触发 style-src CSP
+        const html = data.top.slice(0, 8).map(item => {
+            const pct = Math.round((item.count / max) * 100);
+            return `<div class="space-y-1 domain-bar-item" data-pct="${pct}">
                 <div class="flex justify-between text-xxs"><span class="truncate w-40 font-mono" title="${escapeHtml(item.domain)}">${escapeHtml(item.domain)}</span><span class="text-accentBlue">${item.count}</span></div>
-                <div class="w-full bg-bgBase h-0.5"><div class="bg-accentBlue h-full" style="width: ${(item.count/max)*100}%"></div></div>
-            </div>
-        `).join('');
-        document.getElementById('domains-list').innerHTML = html;
+                <div class="w-full bg-bgBase h-0.5"><div class="bg-accentBlue h-full domain-bar-fill"></div></div>
+            </div>`;
+        }).join('');
+        const listEl = document.getElementById('domains-list');
+        if (!listEl) return;
+        listEl.innerHTML = html;
+        // 渲染后通过 JS 设置宽度（style.setProperty 不受 CSP 限制）
+        listEl.querySelectorAll('.domain-bar-item').forEach(el => {
+            const fill = el.querySelector('.domain-bar-fill');
+            if (fill) fill.style.width = el.dataset.pct + '%';
+        });
     }
 
     async function loadOafStatus() {
@@ -330,7 +343,9 @@
         if (window.lucide) lucide.createIcons();
 
         setInterval(refreshTraffic, 3000);
-        setInterval(loadDevices, 15000);
+        setInterval(loadSysInfo, 10000);   // 系统信息每10秒更新
+        setInterval(loadNetInfo, 15000);   // 联网状态每15秒更新
+        setInterval(loadDevices, 15000);   // 设备列表每15秒更新
     };
 
     if (document.readyState === 'loading') {
