@@ -994,48 +994,68 @@ end
 local function build_devices_data()
     local devices, seen = {}, {}
 
-    local function guess_type(name)
-        local n = (name or ""):lower()
+    local function guess_type(text)
+        local n = (text or ""):lower()
         if n:match("iphone") or n:match("ipad") or n:match("android") or
             n:match("phone") or n:match("mobile") or n:match("pixel") or
             n:match("galaxy") or n:match("oneplus") or n:match("xiaomi") or
-            n:match("huawei") or n:match("oppo") or n:match("vivo") then
+            n:match("huawei") or n:match("oppo") or n:match("vivo") or
+            n:match("redmi") or n:match("honor") then
             return "mobile"
         end
         return "laptop"
     end
 
-    for line in (read_all("/tmp/dhcp.leases") or ""):gmatch("[^\n]+") do
-        local _, mac, ip, name = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
-        if mac then
-            mac = mac:upper()
-            if not seen[mac] then
-                seen[mac] = true
-                local h = (name and name ~= "*") and name or ""
-                devices[#devices + 1] = {
-                    mac    = mac,
-                    ip     = ip or "",
-                    name   = h,
-                    type   = guess_type(h),
-                    active = true,
-                }
-            end
+    local function add_device(ip, mac, name, detail)
+        local ip_val = trim(ip or "")
+        local mac_val = trim(mac or ""):upper()
+        if ip_val == "" or mac_val == "" or mac_val == "00:00:00:00:00:00" then
+            return
         end
+        if seen[mac_val] then
+            return
+        end
+
+        local host = trim(name or "")
+        if host == "-" or host == "*" then
+            host = ""
+        end
+
+        seen[mac_val] = true
+        devices[#devices + 1] = {
+            mac    = mac_val,
+            ip     = ip_val,
+            name   = host,
+            type   = guess_type(host ~= "" and host or trim(detail or "")),
+            active = true,
+        }
     end
 
-    for line in (read_all("/proc/net/arp") or ""):gmatch("[^\n]+") do
-        local ip, _, flags, mac = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
-        if mac and mac ~= "00:00:00:00:00:00" and ip ~= "IP" and flags == "0x2" then
-            mac = mac:upper()
-            if not seen[mac] then
-                seen[mac] = true
-                devices[#devices + 1] = {
-                    mac    = mac,
-                    ip     = ip or "",
-                    name   = "",
-                    type   = "laptop",
-                    active = true,
-                }
+    local scan_cmd = [[arp-scan --interface=br-lan --localnet 2>/dev/null | awk 'NR==FNR {name[$3]=$4; next} /^[0-9]+\./ { host=(name[$1] && name[$1]!="*") ? name[$1] : "-"; printf "%s\t%s\t%s\t%s\n", $1, $2, host, substr($0, index($0,$3)) }' /tmp/dhcp.leases - 2>/dev/null]]
+    local pipe = io.popen(scan_cmd)
+    if pipe then
+        for line in pipe:lines() do
+            local ip, mac, host, detail = tostring(line or ""):match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t?(.*)$")
+            if ip and mac then
+                add_device(ip, mac, host, detail)
+            end
+        end
+        pipe:close()
+    end
+
+    if #devices == 0 then
+        local lease_name = {}
+        for line in (read_all("/tmp/dhcp.leases") or ""):gmatch("[^\n]+") do
+            local _, _, ip, name = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
+            if ip then
+                lease_name[ip] = (name and name ~= "*") and name or ""
+            end
+        end
+
+        for line in (read_all("/proc/net/arp") or ""):gmatch("[^\n]+") do
+            local ip, _, flags, mac = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
+            if ip ~= "IP" and flags == "0x2" and mac then
+                add_device(ip, mac, lease_name[ip] or "", "")
             end
         end
     end
