@@ -83,6 +83,76 @@ local function path_exists(p)
     return false
 end
 
+local DOMAIN_CACHE_FILE = "/tmp/.dashboard_domain_cache.json"
+local DOMAIN_CACHE_TTL = 180
+
+local function save_domain_cache(source, domains, realtime_rows, realtime_source)
+    if trim(source or "") == "" or type(domains) ~= "table" or #domains == 0 then
+        return
+    end
+
+    local cached_domains = {}
+    local max_domains = math.min(#domains, 4000)
+    for i = 1, max_domains do
+        cached_domains[i] = domains[i]
+    end
+
+    local cached_realtime = {}
+    if type(realtime_rows) == "table" then
+        local max_rows = math.min(#realtime_rows, 40)
+        for i = 1, max_rows do
+            local row = realtime_rows[i]
+            if type(row) == "table" then
+                cached_realtime[#cached_realtime + 1] = {
+                    domain = row.domain,
+                    count = tonumber(row.count) or 0,
+                }
+            end
+        end
+    end
+
+    local payload = {
+        timestamp = os.time(),
+        source = trim(source or "none"),
+        realtime_source = trim(realtime_source or "none"),
+        domains = cached_domains,
+        realtime = cached_realtime,
+    }
+
+    local encoded = jsonc.stringify(payload)
+    if encoded and encoded ~= "" then
+        fs.writefile(DOMAIN_CACHE_FILE, encoded)
+    end
+end
+
+local function load_domain_cache()
+    local raw = fs.readfile(DOMAIN_CACHE_FILE)
+    if not raw or raw == "" then
+        return nil
+    end
+
+    local decoded = jsonc.parse(raw)
+    if type(decoded) ~= "table" then
+        return nil
+    end
+
+    local ts = tonumber(decoded.timestamp) or 0
+    if ts <= 0 or (os.time() - ts) > DOMAIN_CACHE_TTL then
+        return nil
+    end
+
+    if type(decoded.domains) ~= "table" or #decoded.domains == 0 then
+        return nil
+    end
+
+    return {
+        source = trim(decoded.source or "cache"),
+        realtime_source = trim(decoded.realtime_source or "cache"),
+        domains = decoded.domains,
+        realtime = type(decoded.realtime) == "table" and decoded.realtime or {},
+    }
+end
+
 local function read_conntrack_count()
     local direct = tonumber(trim(read_line("/proc/sys/net/netfilter/nf_conntrack_count") or ""))
     if direct then
@@ -777,7 +847,19 @@ local function collect_domain_source()
 
     if #merged > 0 then
         local merged_source = (#source_flags > 0) and table.concat(source_flags, "+") or "proxy-log"
+        save_domain_cache(merged_source, merged, realtime_rows, realtime_source)
         return merged_source, merged, realtime_rows, realtime_source
+    end
+
+    local cache = load_domain_cache()
+    if cache then
+        local cache_source = trim(cache.source)
+        if cache_source == "" then
+            cache_source = "cache"
+        else
+            cache_source = "cache+" .. cache_source
+        end
+        return cache_source, cache.domains, cache.realtime, cache.realtime_source
     end
 
     return "none", {}, realtime_rows, realtime_source
