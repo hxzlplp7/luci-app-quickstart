@@ -130,6 +130,171 @@ local function compare_versions(left, right)
     return 0
 end
 
+local function normalize_domain(value)
+    local domain = trim(value):lower()
+    if domain == "" then
+        return nil
+    end
+
+    domain = domain:gsub("^https?://", "")
+    domain = domain:gsub("^%*%.", "")
+    domain = domain:gsub("/.*$", "")
+    domain = domain:gsub(":.*$", "")
+    domain = domain:gsub("%.+$", "")
+
+    if domain == "" or not domain:match("[%a]") then
+        return nil
+    end
+
+    if domain:match("^%d+%.%d+%.%d+%.%d+$") then
+        return nil
+    end
+
+    if domain:match("in%-addr%.arpa$") or domain == "localhost" then
+        return nil
+    end
+
+    return domain
+end
+
+local function extract_domains_from_line(line)
+    local results = {}
+    local seen = {}
+    local raw = tostring(line or "")
+    local patterns = {
+        "query[%[%]%w]*%s+([%w%-%.]+)%s+from",
+        "reply%s+([%w%-%.]+)%s+is",
+        "cached%s+([%w%-%.]+)%s+is",
+        "host=([%w%-%.]+)",
+        "sni=([%w%-%.]+)",
+    }
+
+    for _, pattern in ipairs(patterns) do
+        for candidate in raw:gmatch(pattern) do
+            local domain = normalize_domain(candidate)
+            if domain and not seen[domain] then
+                seen[domain] = true
+                results[#results + 1] = domain
+            end
+        end
+    end
+
+    for candidate in raw:gmatch("([%w][%w%-]*[%w]?%.[%w%.%-]+)") do
+        local domain = normalize_domain(candidate)
+        if domain and not seen[domain] then
+            seen[domain] = true
+            results[#results + 1] = domain
+        end
+    end
+
+    return results
+end
+
+local function table_count(map)
+    local total = 0
+    for _ in pairs(map or {}) do
+        total = total + 1
+    end
+    return total
+end
+
+local function normalize_host_rule(value)
+    local host = trim(value):lower()
+    if host == "" then
+        return nil
+    end
+
+    host = host:gsub("^https?://", "")
+    host = host:gsub("^%.+", "")
+    host = host:gsub("/.*$", "")
+    host = host:gsub(":.*$", "")
+    host = host:gsub("%s+", "")
+    host = host:gsub("%.+$", "")
+
+    if host == "" or host == "*" or host == "-" then
+        return nil
+    end
+
+    if host:find("%?") or host:find("%^") then
+        return nil
+    end
+
+    if host:match("^%d+%.%d+%.%d+%.%d+$") then
+        return nil
+    end
+
+    if not host:match("[%a]") then
+        return nil
+    end
+
+    return host
+end
+
+local function parse_host_rules(blob)
+    local hosts = {}
+    local seen = {}
+    local raw_blob = tostring(blob or "")
+
+    for rule in raw_blob:gmatch("[^,]+") do
+        local fields = {}
+        local start_at = 1
+        while true do
+            local idx = rule:find(";", start_at, true)
+            if not idx then
+                fields[#fields + 1] = rule:sub(start_at)
+                break
+            end
+            fields[#fields + 1] = rule:sub(start_at, idx - 1)
+            start_at = idx + 1
+        end
+
+        local host_field = trim(fields[4] or "")
+        if host_field ~= "" then
+            for token in host_field:gmatch("[^|]+") do
+                local host = normalize_host_rule(token)
+                if host and not seen[host] then
+                    seen[host] = true
+                    hosts[#hosts + 1] = host
+                end
+            end
+        end
+    end
+
+    return hosts
+end
+
+local function domain_matches_host(domain, host)
+    local normalized_domain = normalize_domain(domain)
+    local normalized_host = normalize_host_rule(host)
+
+    if not normalized_domain or not normalized_host then
+        return false, 0
+    end
+
+    if normalized_host:find("*", 1, true) then
+        local wildcard = "^" .. normalized_host:gsub("([%^%$%(%)%%%.%[%]%+%-%?])", "%%%1"):gsub("%*", ".*") .. "$"
+        if normalized_domain:match(wildcard) then
+            return true, 200 + #normalized_host
+        end
+    end
+
+    if normalized_domain == normalized_host then
+        return true, 300 + #normalized_host
+    end
+
+    if #normalized_domain > #normalized_host then
+        if normalized_domain:sub(-(#normalized_host + 1)) == "." .. normalized_host then
+            return true, 250 + #normalized_host
+        end
+    end
+
+    if normalized_domain:find(normalized_host, 1, true) then
+        return true, 100 + #normalized_host
+    end
+
+    return false, 0
+end
+
 local function parse_feature_catalog(path)
     local catalog = {
         path = path,
@@ -138,6 +303,7 @@ local function parse_feature_catalog(path)
         app_count = 0,
         apps = {},
         classes = {},
+        matchable_apps = {},
     }
 
     if not path or not path_exists(path) then
@@ -174,17 +340,27 @@ local function parse_feature_catalog(path)
                         current_label = trim(class_label or class_code)
                         catalog.classes[current_class] = current_label
                     elseif current_class and not line:match("^#") then
-                        local app_id, app_name = line:match("^(%d+)%s+([^:]+):")
+                        local app_id, app_name, rule_blob = line:match("^(%d+)%s+([^:]+):%[(.*)%]%s*$")
+                        if not app_id then
+                            app_id, app_name = line:match("^(%d+)%s+([^:]+):")
+                            rule_blob = ""
+                        end
                         if app_id and app_name then
                             local id = tonumber(app_id)
                             if id then
-                                catalog.apps[id] = {
+                                local host_rules = parse_host_rules(rule_blob)
+                                local app_entry = {
                                     id = id,
                                     name = trim(app_name),
                                     class = current_class,
                                     class_label = current_label or current_class,
+                                    host_rules = host_rules,
                                 }
+                                catalog.apps[id] = app_entry
                                 catalog.app_count = catalog.app_count + 1
+                                if #host_rules > 0 then
+                                    catalog.matchable_apps[#catalog.matchable_apps + 1] = app_entry
+                                end
                             end
                         end
                     end
@@ -266,6 +442,289 @@ local function icon_url_for(app_id)
         return "/luci-static/resources/app_icons/" .. tostring(app_id) .. ".png"
     end
     return "/luci-static/resources/app_icons/default.png"
+end
+
+local function collect_dnsmasq_activity(command)
+    local domains = {}
+    local ip_map = {}
+    local pipe = io.popen(command .. " 2>/dev/null")
+    if not pipe then
+        return domains, ip_map
+    end
+
+    local function record_ip_domain(ip, domain)
+        if trim(ip) == "" or not domain then
+            return
+        end
+
+        local bucket = ip_map[ip]
+        if not bucket then
+            bucket = {}
+            ip_map[ip] = bucket
+        end
+        bucket[domain] = (bucket[domain] or 0) + 1
+    end
+
+    for line in pipe:lines() do
+        local raw = tostring(line or "")
+        local extracted = extract_domains_from_line(raw)
+        for _, domain in ipairs(extracted) do
+            domains[#domains + 1] = domain
+        end
+
+        local reply_domain, reply_ip = raw:match("reply%s+([%w%-%.]+)%s+is%s+([%d%.]+)")
+        if not reply_domain then
+            reply_domain, reply_ip = raw:match("cached%s+([%w%-%.]+)%s+is%s+([%d%.]+)")
+        end
+        local normalized = normalize_domain(reply_domain)
+        if normalized and reply_ip then
+            record_ip_domain(reply_ip, normalized)
+        end
+    end
+
+    pipe:close()
+    return domains, ip_map
+end
+
+local function collect_conntrack_domain_rows(ip_map, limit)
+    local rows = {}
+    if type(ip_map) ~= "table" or next(ip_map) == nil then
+        return rows
+    end
+
+    local pipe = io.popen("conntrack -L 2>/dev/null")
+    if not pipe then
+        return rows
+    end
+
+    local counts = {}
+    local last_seen = {}
+    local domain_clients = {}
+    local seq = 0
+
+    for line in pipe:lines() do
+        local raw = tostring(line or "")
+        local dst_ip = raw:match("dst=([%d%.]+)")
+        local src_ip = raw:match("src=([%d%.]+)")
+        local bucket = dst_ip and ip_map[dst_ip] or nil
+
+        if bucket then
+            local best_domain = nil
+            local best_weight = -1
+            for domain, weight in pairs(bucket) do
+                local score = tonumber(weight) or 0
+                if score > best_weight then
+                    best_weight = score
+                    best_domain = domain
+                end
+            end
+
+            if best_domain then
+                counts[best_domain] = (counts[best_domain] or 0) + 1
+                seq = seq + 1
+                last_seen[best_domain] = seq
+
+                if src_ip and src_ip ~= "" then
+                    local clients = domain_clients[best_domain]
+                    if not clients then
+                        clients = {}
+                        domain_clients[best_domain] = clients
+                    end
+                    clients[src_ip] = true
+                end
+            end
+        end
+    end
+
+    pipe:close()
+
+    for domain, count in pairs(counts) do
+        rows[#rows + 1] = {
+            domain = domain,
+            count = count,
+            devices = table_count(domain_clients[domain]),
+            _last_seen = last_seen[domain] or 0,
+        }
+    end
+
+    table.sort(rows, function(a, b)
+        if (a.count or 0) == (b.count or 0) then
+            return (a._last_seen or 0) > (b._last_seen or 0)
+        end
+        return (a.count or 0) > (b.count or 0)
+    end)
+
+    local max_rows = math.max(1, tonumber(limit) or 20)
+    while #rows > max_rows do
+        table.remove(rows)
+    end
+    for _, row in ipairs(rows) do
+        row._last_seen = nil
+    end
+
+    return rows
+end
+
+local function build_domain_rows_from_list(domains, limit)
+    local rows = {}
+    local counts = {}
+    local last_seen = {}
+
+    for idx, domain in ipairs(domains or {}) do
+        local normalized = normalize_domain(domain)
+        if normalized then
+            counts[normalized] = (counts[normalized] or 0) + 1
+            last_seen[normalized] = idx
+        end
+    end
+
+    for domain, count in pairs(counts) do
+        rows[#rows + 1] = {
+            domain = domain,
+            count = count,
+            devices = 0,
+            _last_seen = last_seen[domain] or 0,
+        }
+    end
+
+    table.sort(rows, function(a, b)
+        if (a.count or 0) == (b.count or 0) then
+            return (a._last_seen or 0) > (b._last_seen or 0)
+        end
+        return (a.count or 0) > (b.count or 0)
+    end)
+
+    local max_rows = math.max(1, tonumber(limit) or 20)
+    while #rows > max_rows do
+        table.remove(rows)
+    end
+    for _, row in ipairs(rows) do
+        row._last_seen = nil
+    end
+
+    return rows
+end
+
+local function collect_realtime_domain_rows(limit)
+    local domains, ip_map = collect_dnsmasq_activity("logread | grep -iE 'dnsmasq' | tail -n 12000")
+    local rows = collect_conntrack_domain_rows(ip_map, limit or 30)
+    local source = "conntrack+dnsmasq"
+
+    if #rows == 0 then
+        rows = build_domain_rows_from_list(domains, limit or 30)
+        if #rows > 0 then
+            source = "dnsmasq-logread"
+        else
+            source = "none"
+        end
+    end
+
+    return rows, source
+end
+
+local function match_domain_to_app(domain, catalog)
+    local best_app = nil
+    local best_score = -1
+    local normalized = normalize_domain(domain)
+
+    if not normalized then
+        return nil
+    end
+
+    for _, app in ipairs(catalog.matchable_apps or {}) do
+        for _, host_rule in ipairs(app.host_rules or {}) do
+            local hit, score = domain_matches_host(normalized, host_rule)
+            if hit and score > best_score then
+                best_app = app
+                best_score = score
+            end
+        end
+    end
+
+    return best_app
+end
+
+local function collect_realtime_feature_overview(catalog)
+    local rows, domain_source = collect_realtime_domain_rows(40)
+    if #rows == 0 then
+        return {}, {}, domain_source, 0
+    end
+
+    local apps = {}
+    local by_app = {}
+    local class_totals = {}
+
+    for _, row in ipairs(rows) do
+        local domain = normalize_domain(row.domain)
+        local app = domain and match_domain_to_app(domain, catalog) or nil
+        if app then
+            local app_id = tonumber(app.id) or 0
+            local hits = tonumber(row.count) or 1
+            if hits < 1 then
+                hits = 1
+            end
+
+            local entry = by_app[app_id]
+            if not entry then
+                entry = {
+                    id = app_id,
+                    name = trim(app.name or tostring(app_id)),
+                    class = trim(app.class or ""),
+                    class_label = trim(app.class_label or app.class or ""),
+                    hits = 0,
+                    time = 0,
+                    devices = 0,
+                    latest_time = os.time(),
+                    last_seen = 0,
+                    icon = icon_url_for(app_id),
+                    source = "domain-feature",
+                }
+                by_app[app_id] = entry
+                apps[#apps + 1] = entry
+            end
+
+            entry.hits = entry.hits + hits
+            entry.time = entry.hits
+            entry.devices = math.max(entry.devices or 0, tonumber(row.devices) or 0)
+
+            local class_key = entry.class_label ~= "" and entry.class_label or entry.class
+            if class_key ~= "" then
+                local class_entry = class_totals[class_key]
+                if not class_entry then
+                    class_entry = {
+                        key = class_key,
+                        name = class_key,
+                        time = 0,
+                    }
+                    class_totals[class_key] = class_entry
+                end
+                class_entry.time = class_entry.time + hits
+            end
+        end
+    end
+
+    table.sort(apps, function(a, b)
+        if (a.hits or 0) == (b.hits or 0) then
+            return (a.name or "") < (b.name or "")
+        end
+        return (a.hits or 0) > (b.hits or 0)
+    end)
+    while #apps > 8 do
+        table.remove(apps)
+    end
+
+    local class_stats = {}
+    for _, item in pairs(class_totals) do
+        class_stats[#class_stats + 1] = item
+    end
+    table.sort(class_stats, function(a, b)
+        return (a.time or 0) > (b.time or 0)
+    end)
+    while #class_stats > 6 do
+        table.remove(class_stats)
+    end
+
+    return apps, class_stats, domain_source, #rows
 end
 
 local function collect_usage_overview(catalog)
@@ -542,7 +1001,13 @@ end
 local function build_status_response()
     local catalog = load_feature_catalog()
     local engine_version, plugin_version, data = get_engine_info()
-    local active_apps, class_stats = collect_usage_overview(catalog)
+    local active_apps, class_stats, domain_source, realtime_domain_count = collect_realtime_feature_overview(catalog)
+    local active_source = "domain-feature:" .. (domain_source or "none")
+
+    if (realtime_domain_count or 0) <= 0 then
+        active_apps, class_stats = collect_usage_overview(catalog)
+        active_source = "appfilter-usage"
+    end
     local current_version = catalog.version
 
     if current_version == "" then
@@ -570,6 +1035,7 @@ local function build_status_response()
         engine = engine,
         engine_version = engine_version,
         enabled = tonumber(data.enable or 0) == 1,
+        active_source = active_source or "none",
         active_apps = active_apps,
         class_stats = class_stats,
         last_update = os.date("%Y-%m-%d %H:%M:%S"),
