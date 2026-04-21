@@ -42,6 +42,9 @@ msgstr ""
 msgid "Hot Domains"
 msgstr ""
 
+msgid "Realtime Domains"
+msgstr ""
+
 msgid "Online Device List"
 msgstr ""
 

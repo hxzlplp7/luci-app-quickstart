@@ -230,6 +230,11 @@ h4 {
     padding-right: 4px;
 }
 
+.domain-list-compact {
+    min-height: 220px;
+    max-height: 320px;
+}
+
 .domain-row {
     display: grid;
     gap: 4px;

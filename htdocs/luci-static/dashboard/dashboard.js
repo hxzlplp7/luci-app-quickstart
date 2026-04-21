@@ -387,41 +387,34 @@
         renderDevices(data.slice(0, 16));
     }
 
-    function renderDomains(data) {
-        const list = byId('domains-list');
+    function normalizeDomainRows(rows) {
+        const merged = [];
+        const seen = new Set();
+        (Array.isArray(rows) ? rows : []).forEach((item) => {
+            const domain = String((item && item.domain) || '').trim();
+            if (!domain || seen.has(domain)) {
+                return;
+            }
+            seen.add(domain);
+            merged.push({
+                domain,
+                count: Number(item.count) || 0
+            });
+        });
+        return merged;
+    }
+
+    function renderDomainRows(targetId, rows, emptyText) {
+        const list = byId(targetId);
         if (!list) {
             return;
         }
-        const topList = data && Array.isArray(data.top) ? data.top : [];
-        const recentList = data && Array.isArray(data.recent) ? data.recent : [];
-        const merged = [];
-        const seen = new Set();
-
-        const pushRows = (rows) => {
-            rows.forEach((item) => {
-                const domain = String((item && item.domain) || '').trim();
-                if (!domain || seen.has(domain)) {
-                    return;
-                }
-                seen.add(domain);
-                merged.push({
-                    domain,
-                    count: Number(item.count) || 0
-                });
-            });
-        };
-
-        pushRows(topList);
-        pushRows(recentList);
-
-        if (!merged.length) {
-            list.innerHTML = `<div class="domain-row">${escapeHtml(I18N.noDomainActivity)}</div>`;
-            setText('domain-source', data && data.source ? data.source : '-');
+        if (!rows.length) {
+            list.innerHTML = `<div class="domain-row">${escapeHtml(emptyText)}</div>`;
             return;
         }
-        setText('domain-source', data.source || '-');
-        const max = Math.max(1, Number(merged[0].count) || 1);
-        list.innerHTML = merged.slice(0, DOMAIN_MAX_ROWS).map((item) => {
+        const max = Math.max(1, Number(rows[0].count) || 1);
+        list.innerHTML = rows.slice(0, DOMAIN_MAX_ROWS).map((item) => {
             const name = escapeHtml(item.domain || '-');
             const count = Number(item.count) || 0;
             const pct = Math.round((count / max) * 100);
@@ -439,6 +432,21 @@
             const pct = Number(el.getAttribute('data-pct')) || 0;
             el.style.width = `${pct}%`;
         });
+    }
+
+    function renderDomains(data) {
+        const topList = data && Array.isArray(data.top) ? data.top : [];
+        const recentList = data && Array.isArray(data.recent) ? data.recent : [];
+        const realtimeList = data && Array.isArray(data.realtime) ? data.realtime : [];
+
+        const hotRows = normalizeDomainRows(topList.concat(recentList));
+        const realtimeRows = normalizeDomainRows(realtimeList);
+
+        renderDomainRows('domains-list', hotRows, I18N.noDomainActivity);
+        renderDomainRows('realtime-domains-list', realtimeRows, I18N.noDomainActivity);
+
+        setText('domain-source', data && data.source ? data.source : '-');
+        setText('realtime-domain-source', data && data.realtime_source ? data.realtime_source : '-');
     }
 
     async function loadDomains() {

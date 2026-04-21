@@ -512,6 +512,71 @@ local function collect_domains_from_conntrack(ip_map)
     return domains
 end
 
+local function collect_conntrack_domain_rows(ip_map, limit)
+    local rows = {}
+    if type(ip_map) ~= "table" or next(ip_map) == nil then
+        return rows
+    end
+
+    local pipe = io.popen("conntrack -L 2>/dev/null")
+    if not pipe then
+        return rows
+    end
+
+    local counts = {}
+    local last_seen = {}
+    local seq = 0
+
+    for line in pipe:lines() do
+        local dst_ip = tostring(line or ""):match("dst=([%d%.]+)")
+        local bucket = dst_ip and ip_map[dst_ip] or nil
+        if bucket then
+            local best_domain = nil
+            local best_weight = -1
+            for domain, weight in pairs(bucket) do
+                local w = tonumber(weight) or 0
+                if w > best_weight then
+                    best_weight = w
+                    best_domain = domain
+                end
+            end
+
+            if best_domain then
+                counts[best_domain] = (counts[best_domain] or 0) + 1
+                seq = seq + 1
+                last_seen[best_domain] = seq
+            end
+        end
+    end
+
+    pipe:close()
+
+    for domain, count in pairs(counts) do
+        rows[#rows + 1] = {
+            domain = domain,
+            count = count,
+            _last_seen = last_seen[domain] or 0,
+        }
+    end
+
+    table.sort(rows, function(a, b)
+        if (a.count or 0) == (b.count or 0) then
+            return (a._last_seen or 0) > (b._last_seen or 0)
+        end
+        return (a.count or 0) > (b.count or 0)
+    end)
+
+    local max_rows = math.max(1, tonumber(limit) or 20)
+    while #rows > max_rows do
+        table.remove(rows)
+    end
+    for _, row in ipairs(rows) do
+        row._last_seen = nil
+    end
+
+    return rows
+end
+
 local function collect_domains_from_appfilter_visitlist()
     local domains = {}
     local ok, payload = pcall(util.ubus, "appfilter", "visit_list", {})
@@ -620,6 +685,8 @@ local function collect_domain_source()
     local merged = {}
     local source_flags = {}
     local max_merged = 16000
+    local realtime_rows = {}
+    local realtime_source = "none"
 
     local function append_domains(source_name, domains, cap)
         if type(domains) ~= "table" or #domains == 0 or #merged >= max_merged then
@@ -657,6 +724,10 @@ local function collect_domain_source()
             if #conntrack_domains > 0 then
                 append_domains("conntrack+dnsmasq", conntrack_domains, 5000)
             end
+        end
+        realtime_rows = collect_conntrack_domain_rows(dnsmasq_ip_map, 25)
+        if #realtime_rows > 0 then
+            realtime_source = "conntrack+dnsmasq"
         end
     end
 
@@ -706,10 +777,10 @@ local function collect_domain_source()
 
     if #merged > 0 then
         local merged_source = (#source_flags > 0) and table.concat(source_flags, "+") or "proxy-log"
-        return merged_source, merged
+        return merged_source, merged, realtime_rows, realtime_source
     end
 
-    return "none", {}
+    return "none", {}, realtime_rows, realtime_source
 end
 
 -- =====================================================================
@@ -982,11 +1053,13 @@ end
 -- =====================================================================
 
 local function collect_domain_activity(limit_top, limit_recent)
-    local result = { source = "none", top = {}, recent = {}, lines = {} }
-    local source, lines = collect_domain_source()
+    local result = { source = "none", realtime_source = "none", top = {}, recent = {}, realtime = {}, lines = {} }
+    local source, lines, realtime_rows, realtime_source = collect_domain_source()
     local counts = {}
     result.source = source
+    result.realtime_source = realtime_source or "none"
     result.lines = lines
+    result.realtime = type(realtime_rows) == "table" and realtime_rows or {}
 
     for i = 1, #lines do
         local d_val = lines[i]
@@ -1014,7 +1087,13 @@ end
 
 local function build_domains_data()
     local activity = collect_domain_activity(25, 25)
-    return { source = activity.source, top = activity.top, recent = activity.recent }
+    return {
+        source = activity.source,
+        realtime_source = activity.realtime_source,
+        top = activity.top,
+        recent = activity.recent,
+        realtime = activity.realtime,
+    }
 end
 
 local function api_domains()

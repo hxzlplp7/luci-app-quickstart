@@ -176,3 +176,6 @@ msgstr "å°æ—¶"
 
 msgid "m"
 msgstr "åˆ†"
+
+msgid "Realtime Domains"
+msgstr "ÊµÊ±ÓòÃû"
