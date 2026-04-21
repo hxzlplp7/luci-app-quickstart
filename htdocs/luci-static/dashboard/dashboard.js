@@ -356,24 +356,58 @@
         setText('wan-ip', data.wanIp || '-');
         setText('gateway', data.gateway || '-');
         setText('interface-name', data.interfaceName || '-');
+        setText('dns-servers', Array.isArray(data.dns) && data.dns.length ? data.dns.join(' ') : '-');
+        setText('network-uptime', formatUptime(data.network_uptime_raw));
         setText('conn-count', Number(data.connCount) || 0);
     }
 
     function renderDevices(devices) {
-        const body = byId('devices-list');
-        if (!body) {
+        const list = byId('devices-list');
+        if (!list) {
             return;
         }
+        const tag = String(list.tagName || '').toLowerCase();
+        const tableMode = tag === 'tbody';
         if (!devices || !devices.length) {
-            body.innerHTML = `<tr><td colspan="3">${escapeHtml(I18N.noOnlineDeviceData)}</td></tr>`;
+            if (tableMode) {
+                list.innerHTML = `<tr><td colspan="3">${escapeHtml(I18N.noOnlineDeviceData)}</td></tr>`;
+            } else {
+                list.innerHTML = `<div class="empty-line">${escapeHtml(I18N.noOnlineDeviceData)}</div>`;
+            }
             return;
         }
-        body.innerHTML = devices.map((dev) => {
-            const name = escapeHtml(dev.name || dev.mac || '-');
+
+        if (tableMode) {
+            list.innerHTML = devices.map((dev) => {
+                const name = escapeHtml(dev.name || dev.mac || '-');
+                const ip = escapeHtml(dev.ip || '-');
+                const dotClass = dev.active ? 'status-dot' : 'status-dot off';
+                return `<tr><td title="${name}">${name}</td><td>${ip}</td><td><span class="${dotClass}"></span></td></tr>`;
+            }).join('');
+            return;
+        }
+
+        list.innerHTML = devices.map((dev) => {
+            const rawName = dev.name || dev.mac || '-';
+            const name = escapeHtml(rawName);
             const ip = escapeHtml(dev.ip || '-');
             const dotClass = dev.active ? 'status-dot' : 'status-dot off';
-            return `<tr><td title="${name}">${name}</td><td>${ip}</td><td><span class="${dotClass}"></span></td></tr>`;
+            const type = String(dev.type || '').toLowerCase();
+            const icon = type === 'mobile' ? 'smartphone' : (type === 'other' ? 'monitor' : 'laptop');
+            return `
+                <div class="device-row" title="${name}">
+                    <div class="device-meta">
+                        <i data-lucide="${icon}" class="device-icon"></i>
+                        <span class="device-name">${name}</span>
+                    </div>
+                    <span class="device-ip">${ip}</span>
+                    <span class="${dotClass}"></span>
+                </div>
+            `;
         }).join('');
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+        }
     }
 
     async function loadDevices() {
@@ -410,8 +444,25 @@
         if (!list) {
             return;
         }
+        const realtimeMode = targetId === 'realtime-domains-list';
         if (!rows.length) {
-            list.innerHTML = `<div class="domain-row">${escapeHtml(emptyText)}</div>`;
+            list.innerHTML = `<div class="empty-line">${escapeHtml(emptyText)}</div>`;
+            return;
+        }
+        if (realtimeMode) {
+            list.innerHTML = rows.slice(0, DOMAIN_MAX_ROWS).map((item) => {
+                const name = escapeHtml(item.domain || '-');
+                const count = Number(item.count) || 0;
+                return `
+                    <div class="realtime-row">
+                        <span class="realtime-left">
+                            <span class="realtime-dot"></span>
+                            <span class="realtime-domain" title="${name}">${name}</span>
+                        </span>
+                        <span class="realtime-count">${count}</span>
+                    </div>
+                `;
+            }).join('');
             return;
         }
         const max = Math.max(1, Number(rows[0].count) || 1);

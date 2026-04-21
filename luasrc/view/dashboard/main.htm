@@ -5,111 +5,147 @@
 
 <div class="dash-page">
     <div class="dash-shell">
-        <div class="dash-main">
-            <div class="top-stats">
-                <div class="stat-card">
-                    <div class="stat-label"><%:Internet Status%></div>
-                    <div class="stat-value internet-up" id="internet-status"><%:Checking...%></div>
+        <section class="top-stats">
+            <div class="stat-card">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Internet Status%></span>
+                    <i data-lucide="check-circle-2" class="stat-icon good"></i>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label"><%:Online Devices%></div>
-                    <div class="stat-value" id="active-device-count">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label"><%:Connections%></div>
-                    <div class="stat-value" id="conn-count">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label"><%:Total Download%></div>
-                    <div class="stat-value" id="stat-total-down">0 B</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label"><%:Total Upload%></div>
-                    <div class="stat-value" id="stat-total-up">0 B</div>
-                </div>
+                <div class="stat-value internet-up" id="internet-status"><%:Checking...%></div>
             </div>
+            <div class="stat-card">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Online Devices%></span>
+                    <i data-lucide="users" class="stat-icon blue"></i>
+                </div>
+                <div class="stat-value" id="active-device-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Connections%></span>
+                    <i data-lucide="link" class="stat-icon indigo"></i>
+                </div>
+                <div class="stat-value" id="conn-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Total Download%></span>
+                    <i data-lucide="download" class="stat-icon blue"></i>
+                </div>
+                <div class="stat-value" id="stat-total-down">0 B</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Total Upload%></span>
+                    <i data-lucide="upload" class="stat-icon green"></i>
+                </div>
+                <div class="stat-value" id="stat-total-up">0 B</div>
+            </div>
+        </section>
 
-            <div class="main-grid">
-                <section class="card full">
-                    <div class="card-head">
-                        <h3><%:Traffic Statistics%></h3>
+        <section class="row-main">
+            <article class="panel network-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="globe" class="head-icon blue"></i><span><%:Network%></span></span></h3>
+                </div>
+                <div class="kv-list">
+                    <div class="kv-row">
+                        <span><%:WAN IP%></span>
+                        <strong id="wan-ip">-</strong>
                     </div>
-                    <div class="chart-wrap traffic-wrap">
-                        <canvas id="trafficChart"></canvas>
+                    <div class="kv-row">
+                        <span><%:LAN IP%></span>
+                        <strong id="lan-ip">-</strong>
                     </div>
-                    <div class="rate-line">
-                        <span><%:Upload%>: <strong id="wan-up-rate">0 B/s</strong></span>
+                    <div class="kv-row">
+                        <span><%:Gateway%></span>
+                        <strong id="gateway">-</strong>
+                    </div>
+                    <div class="kv-row">
+                        <span><%:Interface%></span>
+                        <strong id="interface-name">-</strong>
+                    </div>
+                    <div class="kv-row">
+                        <span><%:DNS%></span>
+                        <strong id="dns-servers">-</strong>
+                    </div>
+                </div>
+                <div class="online-tip">
+                    <span><%:Uptime%></span>
+                    <span id="network-uptime">-</span>
+                </div>
+            </article>
+
+            <article class="panel traffic-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="activity" class="head-icon blue"></i><span><%:Traffic Statistics%></span></span></h3>
+                    <div class="rate-badge">
                         <span><%:Download%>: <strong id="wan-down-rate">0 B/s</strong></span>
+                        <span><%:Upload%>: <strong id="wan-up-rate">0 B/s</strong></span>
                     </div>
-                </section>
-
-                <section class="card full">
-                    <div class="card-head">
-                        <h3><%:Active Apps%></h3>
-                        <span class="sub-num" id="app-count">0</span>
-                    </div>
-                    <div class="app-grid" id="oaf-apps-list"></div>
-                </section>
-
-                <section class="card">
-                    <div class="card-head">
-                        <h3><%:App Distribution%></h3>
-                    </div>
-                    <div class="chart-wrap pie-wrap">
-                        <canvas id="appUsageChart"></canvas>
-                    </div>
-                </section>
-
-                <section class="card">
-                    <div class="card-head">
-                        <h3><%:Hot Domains%></h3>
-                        <span class="sub-note" id="domain-source">-</span>
-                    </div>
-                    <div class="domain-list" id="domains-list"></div>
-                </section>
-
-                <section class="card">
-                    <div class="card-head">
-                        <h3><%:Realtime Domains%></h3>
-                        <span class="sub-note" id="realtime-domain-source">-</span>
-                    </div>
-                    <div class="domain-list domain-list-compact" id="realtime-domains-list"></div>
-                </section>
-
-                <section class="card list full">
-                    <div class="card-head">
-                        <h3><%:Online Device List%></h3>
-                    </div>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th><%:Name%></th>
-                                    <th><%:IP Address%></th>
-                                    <th><%:Status%></th>
-                                </tr>
-                            </thead>
-                            <tbody id="devices-list"></tbody>
-                        </table>
-                    </div>
-                </section>
-            </div>
-        </div>
-
-        <aside class="dash-side">
-            <section class="mini-card">
-                <h4><%:System Information%></h4>
-                <div class="kv">
-                    <div><%:Hostname%></div><div id="sys-hostname">-</div>
-                    <div><%:Model%></div><div id="sys-model">-</div>
-                    <div><%:Firmware%></div><div id="sys-firmware">-</div>
-                    <div><%:Kernel%></div><div id="sys-kernel">-</div>
-                    <div><%:Uptime%></div><div id="sys-uptime">-</div>
                 </div>
-            </section>
+                <div class="traffic-wrap">
+                    <canvas id="trafficChart"></canvas>
+                </div>
+            </article>
+        </section>
 
-            <section class="mini-card">
-                <h4><%:Runtime Status%></h4>
+        <section class="row-apps">
+            <article class="panel app-dist-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="pie-chart" class="head-icon orange"></i><span><%:App Distribution%></span></span></h3>
+                </div>
+                <div class="pie-wrap">
+                    <canvas id="appUsageChart"></canvas>
+                </div>
+            </article>
+
+            <article class="panel active-app-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="layout-grid" class="head-icon pink"></i><span><%:Active Apps%></span></span></h3>
+                    <span class="sub-num" id="app-count">0</span>
+                </div>
+                <div class="app-grid" id="oaf-apps-list"></div>
+            </article>
+
+            <article class="panel hot-domain-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="bar-chart-2" class="head-icon indigo"></i><span><%:Hot Domains%></span></span></h3>
+                    <span class="sub-note" id="domain-source">-</span>
+                </div>
+                <div class="domain-list" id="domains-list"></div>
+            </article>
+        </section>
+
+        <section class="row-bottom">
+            <article class="panel devices-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="users" class="head-icon blue"></i><span><%:Online Device List%></span></span></h3>
+                </div>
+                <div class="devices-list" id="devices-list"></div>
+            </article>
+
+            <article class="panel realtime-domain-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="link" class="head-icon teal"></i><span><%:Realtime Domains%></span></span></h3>
+                    <span class="sub-note" id="realtime-domain-source">-</span>
+                </div>
+                <div class="domain-list domain-list-compact" id="realtime-domains-list"></div>
+            </article>
+        </section>
+
+        <section class="row-extra">
+            <article class="panel system-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="cpu" class="head-icon purple"></i><span><%:System Information%></span></span></h3>
+                </div>
+                <div class="sys-grid">
+                    <div class="sys-item"><span><%:Hostname%></span><strong id="sys-hostname">-</strong></div>
+                    <div class="sys-item"><span><%:Model%></span><strong id="sys-model">-</strong></div>
+                    <div class="sys-item"><span><%:Firmware%></span><strong id="sys-firmware">-</strong></div>
+                    <div class="sys-item"><span><%:Kernel%></span><strong id="sys-kernel">-</strong></div>
+                    <div class="sys-item"><span><%:Uptime%></span><strong id="sys-uptime">-</strong></div>
+                </div>
                 <div class="gauge-row">
                     <div class="gauge-box">
                         <svg viewBox="0 0 100 100" class="gauge-svg">
@@ -117,7 +153,7 @@
                             <circle class="gauge-ring cpu-ring" cx="50" cy="50" r="34" id="cpu-ring"></circle>
                         </svg>
                         <div class="gauge-value" id="cpu-text">0%</div>
-                        <div class="gauge-label"><%:CPU%></div>
+                        <div class="gauge-label">CPU</div>
                     </div>
                     <div class="gauge-box">
                         <svg viewBox="0 0 100 100" class="gauge-svg">
@@ -128,34 +164,20 @@
                         <div class="gauge-label"><%:Memory%></div>
                     </div>
                 </div>
-            </section>
-
-            <section class="mini-card">
-                <h4><%:Network%></h4>
-                <div class="kv">
-                    <div><%:LAN IP%></div><div id="lan-ip">-</div>
-                    <div><%:WAN IP%></div><div id="wan-ip">-</div>
-                    <div><%:Gateway%></div><div id="gateway">-</div>
-                    <div><%:Interface%></div><div id="interface-name">-</div>
-                </div>
-            </section>
-
-            <section class="mini-card">
-                <h4><%:Temperature%></h4>
                 <div class="temp-line">
-                    <span><%:CPU%></span>
+                    <span><%:Temperature%></span>
                     <span id="cpu-temp">-</span>
                 </div>
-                <div class="meter">
-                    <div class="bar" id="temp-bar"></div>
-                </div>
-            </section>
+                <div class="meter"><div class="bar" id="temp-bar"></div></div>
+            </article>
 
-            <section class="mini-card">
-                <h4>OAF</h4>
-                <div class="kv oaf-kv">
-                    <div><%:Version%></div><div id="oaf-version">-</div>
-                    <div><%:Engine%></div><div id="oaf-engine">-</div>
+            <article class="panel oaf-panel">
+                <div class="panel-head">
+                    <h3><span class="head-with-icon"><i data-lucide="shield" class="head-icon teal"></i><span>OAF</span></span></h3>
+                </div>
+                <div class="sys-grid">
+                    <div class="sys-item"><span><%:Version%></span><strong id="oaf-version">-</strong></div>
+                    <div class="sys-item"><span><%:Engine%></span><strong id="oaf-engine">-</strong></div>
                 </div>
                 <div class="oaf-upload">
                     <input type="file" id="oaf-file-input" accept=".bin,.zip">
@@ -164,8 +186,8 @@
                         <div id="oaf-bar" class="oaf-progress-bar"></div>
                     </div>
                 </div>
-            </section>
-        </aside>
+            </article>
+        </section>
     </div>
 </div>
 

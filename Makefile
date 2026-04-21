@@ -11,7 +11,7 @@ PKG_MAINTAINER:=dashboard-community
 
 LUCI_TITLE:=LuCI Dashboard
 LUCI_DESCRIPTION:=A simple dashboard for system, network and storage status.
-LUCI_DEPENDS:=+luci-app-nlbwmon +luci-app-samba4 +conntrack
+LUCI_DEPENDS:=+luci-app-nlbwmon +luci-app-samba4 +conntrack +arp-scan
 LUCI_PKGARCH:=all
 
 LUCI_MINIFY_CSS:=0

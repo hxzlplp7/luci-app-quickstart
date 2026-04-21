@@ -83,6 +83,15 @@ local function path_exists(p)
     return false
 end
 
+local function command_exists(cmd)
+    local name = trim(cmd or "")
+    if name == "" or not name:match("^[%w%._%-]+$") then
+        return false
+    end
+    local ok = os.execute("command -v " .. name .. " >/dev/null 2>&1")
+    return ok == 0 or ok == true
+end
+
 local DOMAIN_CACHE_FILE = "/tmp/.dashboard_domain_cache.json"
 local DOMAIN_CACHE_TTL = 180
 
@@ -1088,13 +1097,36 @@ local function build_devices_data()
         return "laptop"
     end
 
+    local function normalize_mac(mac)
+        local m = trim(mac or ""):upper()
+        if m:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then
+            return m
+        end
+        return ""
+    end
+
+    local function resolve_lan_device_for_scan()
+        local uci = require("luci.model.uci").cursor()
+        local lan_if = trim(uci:get("network", "lan", "device") or uci:get("network", "lan", "ifname") or "")
+        if lan_if ~= "" then
+            return lan_if
+        end
+        local lan_status = util.ubus("network.interface.lan", "status", {}) or {}
+        lan_if = trim(lan_status.l3_device or lan_status.device or "")
+        if lan_if ~= "" then
+            return lan_if
+        end
+        return "br-lan"
+    end
+
     local function add_device(ip, mac, name, detail)
         local ip_val = trim(ip or "")
-        local mac_val = trim(mac or ""):upper()
-        if ip_val == "" or mac_val == "" or mac_val == "00:00:00:00:00:00" then
+        if ip_val == "" then
             return
         end
-        if seen[mac_val] then
+        local mac_val = normalize_mac(mac)
+        local uniq = (mac_val ~= "" and mac_val ~= "00:00:00:00:00:00") and ("mac:" .. mac_val) or ("ip:" .. ip_val)
+        if seen[uniq] then
             return
         end
 
@@ -1103,9 +1135,9 @@ local function build_devices_data()
             host = ""
         end
 
-        seen[mac_val] = true
+        seen[uniq] = true
         devices[#devices + 1] = {
-            mac    = mac_val,
+            mac    = mac_val ~= "" and mac_val or ip_val,
             ip     = ip_val,
             name   = host,
             type   = guess_type(host ~= "" and host or trim(detail or "")),
@@ -1113,27 +1145,75 @@ local function build_devices_data()
         }
     end
 
-    local scan_cmd = [[arp-scan --interface=br-lan --localnet 2>/dev/null | awk 'NR==FNR {name[$3]=$4; next} /^[0-9]+\./ { host=(name[$1] && name[$1]!="*") ? name[$1] : "-"; printf "%s\t%s\t%s\t%s\n", $1, $2, host, substr($0, index($0,$3)) }' /tmp/dhcp.leases - 2>/dev/null]]
-    local pipe = io.popen(scan_cmd)
-    if pipe then
-        for line in pipe:lines() do
-            local ip, mac, host, detail = tostring(line or ""):match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t?(.*)$")
-            if ip and mac then
-                add_device(ip, mac, host, detail)
+    local lan_if = resolve_lan_device_for_scan()
+    local lease_name, lease_mac = {}, {}
+    for line in (read_all("/tmp/dhcp.leases") or ""):gmatch("[^\n]+") do
+        local _, mac, ip, name = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
+        if ip then
+            if name and name ~= "*" then
+                lease_name[ip] = name
+            end
+            local norm = normalize_mac(mac)
+            if norm ~= "" then
+                lease_mac[ip] = norm
             end
         end
-        pipe:close()
+    end
+
+    local arp_mac = {}
+    for line in (read_all("/proc/net/arp") or ""):gmatch("[^\n]+") do
+        local ip, _, flags, mac = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
+        if ip and ip ~= "IP" and flags == "0x2" then
+            local norm = normalize_mac(mac)
+            if norm ~= "" then
+                arp_mac[ip] = norm
+            end
+        end
+    end
+
+    if command_exists("arp-scan") then
+        local scan_cmd
+        if path_exists("/tmp/dhcp.leases") then
+            scan_cmd = "arp-scan --interface=" .. shell_quote(lan_if) ..
+                [[ --localnet 2>/dev/null | awk 'NR==FNR {name[$3]=$4; next} /^[0-9]+\./ { host=(name[$1] && name[$1]!="*") ? name[$1] : "-"; printf "%s\t%s\n", $1, host }' /tmp/dhcp.leases - 2>/dev/null]]
+        else
+            scan_cmd = "arp-scan --interface=" .. shell_quote(lan_if) ..
+                [[ --localnet 2>/dev/null | awk '/^[0-9]+\./ { printf "%s\t-\n", $1 }' 2>/dev/null]]
+        end
+        local pipe = io.popen(scan_cmd)
+        if pipe then
+            for line in pipe:lines() do
+                local ip, host = tostring(line or ""):match("^(%S+)%s+(.+)$")
+                if ip then
+                    local resolved_host = trim(host or "")
+                    if resolved_host == "-" or resolved_host == "*" then
+                        resolved_host = lease_name[ip] or ""
+                    end
+                    add_device(ip, arp_mac[ip] or lease_mac[ip] or "", resolved_host, "")
+                end
+            end
+            pipe:close()
+        end
     end
 
     if #devices == 0 then
-        local lease_name = {}
-        for line in (read_all("/tmp/dhcp.leases") or ""):gmatch("[^\n]+") do
-            local _, _, ip, name = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
-            if ip then
-                lease_name[ip] = (name and name ~= "*") and name or ""
+        local neigh_cmd = "ip neigh show dev " .. shell_quote(lan_if) .. " 2>/dev/null"
+        local pipe = io.popen(neigh_cmd)
+        if pipe then
+            for line in pipe:lines() do
+                local raw = tostring(line or "")
+                if not raw:find("FAILED", 1, true) and not raw:find("INCOMPLETE", 1, true) then
+                    local ip, mac = raw:match("^(%d+%.%d+%.%d+%.%d+)%s+.-lladdr%s+(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)")
+                    if ip then
+                        add_device(ip, mac, lease_name[ip] or "", raw)
+                    end
+                end
             end
+            pipe:close()
         end
+    end
 
+    if #devices == 0 then
         for line in (read_all("/proc/net/arp") or ""):gmatch("[^\n]+") do
             local ip, _, flags, mac = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
             if ip ~= "IP" and flags == "0x2" and mac then
@@ -1141,6 +1221,10 @@ local function build_devices_data()
             end
         end
     end
+
+    table.sort(devices, function(a, b)
+        return (a.ip or "") < (b.ip or "")
+    end)
 
     return devices
 end
