@@ -6,7 +6,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-dashboard
-PKG_VERSION:=0.0.3
+PKG_VERSION:=0.0.4
 PKG_MAINTAINER:=dashboard-community
 
 LUCI_TITLE:=LuCI Dashboard
@@ -54,7 +54,7 @@ if [ -f /etc/uci-defaults/luci-i18n-dashboard-zh-cn ]; then
 fi
 
 if command -v uci >/dev/null 2>&1; then
-	uci -q set luci.languages.zh_cn='简体中文'
+	uci -q set luci.languages.zh_cn='Simplified Chinese'
 	uci -q set luci.main.lang='zh_cn'
 	uci -q commit luci
 fi
