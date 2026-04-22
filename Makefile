@@ -6,7 +6,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-dashboard
-PKG_VERSION:=0.0.2
+PKG_VERSION:=0.0.3
 PKG_MAINTAINER:=dashboard-community
 
 LUCI_TITLE:=LuCI Dashboard
@@ -41,6 +41,25 @@ if [ ! -f "$${ROOT}$${FEATURE_FILE}" ] && [ -f "$${ROOT}$${DEFAULT_DIR}/feature.
 	printf '%s\n' "$${DEFAULT_VERSION}" > "$${ROOT}$${VERSION_FILE}"
 fi
 
+exit 0
+endef
+
+define Package/luci-i18n-dashboard-zh-cn/postinst
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
+
+if [ -f /etc/uci-defaults/luci-i18n-dashboard-zh-cn ]; then
+	( . /etc/uci-defaults/luci-i18n-dashboard-zh-cn ) || true
+	rm -f /etc/uci-defaults/luci-i18n-dashboard-zh-cn
+fi
+
+if command -v uci >/dev/null 2>&1; then
+	uci -q set luci.languages.zh_cn='简体中文'
+	uci -q set luci.main.lang='zh_cn'
+	uci -q commit luci
+fi
+
+rm -f /tmp/luci-indexcache /tmp/luci-indexcache.* 2>/dev/null
 exit 0
 endef
 
