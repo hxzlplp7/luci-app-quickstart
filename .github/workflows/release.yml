@@ -60,7 +60,7 @@ jobs:
             packages: kmod-dashboard-monitor
           - sdk: mediatek-filogic-24.10.5
             primary: true
-            packages: luci-app-dashboard luci-i18n-dashboard-zh-cn kmod-dashboard-monitor
+            packages: luci-app-dashboard kmod-dashboard-monitor
 
     steps:
       - name: Checkout
