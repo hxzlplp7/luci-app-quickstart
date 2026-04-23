@@ -42,15 +42,34 @@ jobs:
           PACKAGES: ${{ env.PKG_LIST }}
           NO_REFRESH_CHECK: true
 
+      - name: Collect Release IPKs
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
+
+          echo "All built IPKs:"
+          find bin -type f -name '*.ipk' | sort || true
+
+          find bin -type f -name 'luci-app-dashboard_*.ipk' -exec cp -f {} dist/ \;
+          find bin -type f -name 'luci-i18n-dashboard-zh-cn_*.ipk' -exec cp -f {} dist/ \;
+          find bin -type f -name 'kmod-dashboard-monitor_*.ipk' -exec cp -f {} dist/ \;
+
+          echo "Release IPKs:"
+          ls -lah dist
+
+          ls dist/luci-app-dashboard_*.ipk >/dev/null 2>&1 || (echo "Missing luci-app-dashboard ipk" && exit 1)
+          ls dist/kmod-dashboard-monitor_*.ipk >/dev/null 2>&1 || (echo "Missing kmod-dashboard-monitor ipk" && exit 1)
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dashboard-packages-ipk
-          path: bin/packages/*/action/*.ipk
+          path: dist/*.ipk
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: bin/packages/*/action/*.ipk
+          files: dist/*.ipk
           generate_release_notes: true
