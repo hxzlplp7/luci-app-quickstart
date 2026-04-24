@@ -95,7 +95,43 @@ end
 local DOMAIN_CACHE_FILE = "/tmp/.dashboard_domain_cache.json"
 local DOMAIN_CACHE_TTL = 180
 local TRAFFIC_STATE_FILE = "/tmp/.dashboard_traffic_state.json"
-local KMOD_TRAFFIC_FILE = "/proc/dashboard_monitor/stats"
+local DASHBOARD_CORE_URL = "http://127.0.0.1:19090"
+
+local function fetch_dashboard_core_databus()
+    local raw = exec_trim("wget -q -T 3 -O - " .. shell_quote(DASHBOARD_CORE_URL .. "/databus"))
+    if raw == "" then
+        return nil
+    end
+
+    local decoded = jsonc.parse(raw)
+    if type(decoded) ~= "table" then
+        return nil
+    end
+
+    if decoded.code == nil then
+        decoded.code = 0
+    end
+    if decoded.timestamp == nil then
+        decoded.timestamp = os.time()
+    end
+
+    return decoded
+end
+
+local function dashboard_core_error()
+    return {
+        code = 503,
+        error = "dashboard-core unavailable",
+    }
+end
+
+local function write_json(payload, status_code, status_text)
+    if status_code and type(http.status) == "function" then
+        http.status(status_code, status_text or "")
+    end
+    http.prepare_content("application/json")
+    http.write(jsonc.stringify(payload or {}))
+end
 
 local function save_domain_cache(source, domains, realtime_rows, realtime_source)
     if trim(source or "") == "" or type(domains) ~= "table" or #domains == 0 then
@@ -179,47 +215,6 @@ local function save_json_file(path, payload)
     if encoded and encoded ~= "" then
         fs.writefile(path, encoded)
     end
-end
-
-local function read_kmod_traffic()
-    local raw = read_all(KMOD_TRAFFIC_FILE)
-    if not raw or raw == "" then
-        return nil
-    end
-
-    local parsed = {}
-    for line in raw:gmatch("[^\n]+") do
-        local key, value = line:match("^([%w_]+)%s*=%s*(.-)%s*$")
-        if key and value then
-            parsed[key] = value
-        end
-    end
-
-    local tx_bytes = tonumber(parsed.tx_bytes or "") or 0
-    local rx_bytes = tonumber(parsed.rx_bytes or "") or 0
-    local tx_rate = tonumber(parsed.tx_rate or "") or 0
-    local rx_rate = tonumber(parsed.rx_rate or "") or 0
-    local sampled_at = tonumber(parsed.sampled_at or "") or os.time()
-    local iface = trim(parsed.interface or "")
-
-    if iface == "" then
-        iface = "all"
-    end
-
-    if tx_bytes < 0 then tx_bytes = 0 end
-    if rx_bytes < 0 then rx_bytes = 0 end
-    if tx_rate < 0 then tx_rate = 0 end
-    if rx_rate < 0 then rx_rate = 0 end
-
-    return {
-        tx_bytes = tx_bytes,
-        rx_bytes = rx_bytes,
-        tx_rate = tx_rate,
-        rx_rate = rx_rate,
-        sampled_at = sampled_at,
-        interface = iface,
-        source = trim(parsed.source or "kmod-dashboard-monitor"),
-    }
 end
 
 local function read_conntrack_count()
@@ -1105,11 +1100,6 @@ end
 -- =====================================================================
 
 local function build_traffic_data()
-    local kmod_data = read_kmod_traffic()
-    if type(kmod_data) == "table" then
-        return kmod_data
-    end
-
     local uplink = resolve_uplink_status()
     local status = type(uplink.status) == "table" and uplink.status or {}
     local l3dev = trim(status.l3_device or status.device or "")
@@ -1602,20 +1592,100 @@ local function build_dashboard_databus()
 end
 
 local function api_databus()
-    http.prepare_content("application/json")
-    http.write(jsonc.stringify(build_dashboard_databus()))
+    local data = fetch_dashboard_core_databus()
+    if not data then
+        return write_json(dashboard_core_error(), 503, "Service Unavailable")
+    end
+    write_json(data)
 end
 
 -- =====================================================================
 -- Page + Local-API Dispatcher
 -- =====================================================================
 
+local function get_backend_databus_or_error()
+    local data = fetch_dashboard_core_databus()
+    if not data then
+        return nil, dashboard_core_error()
+    end
+    return data, nil
+end
+
+local function build_compat_netinfo(databus)
+    local status = type(databus.status) == "table" and databus.status or {}
+    local network = type(databus.network_status) == "table" and databus.network_status or {}
+    local lan = type(network.lan) == "table" and network.lan or {}
+    local wan = type(network.wan) == "table" and network.wan or {}
+    local internet = trim(status.internet or "")
+    local online = status.online and true or false
+
+    if internet == "" then
+        internet = online and "up" or "down"
+    end
+
+    return {
+        wanStatus = (internet == "up" or online) and "up" or "down",
+        wanIp = wan.ip or "",
+        wanIpv6 = wan.ipv6 or "",
+        lanIp = lan.ip or "",
+        dns = wan.dns or lan.dns or {},
+        network_uptime_raw = tonumber(network.uptime_raw or network.network_uptime_raw or 0) or 0,
+        connCount = tonumber(status.conn_count or status.connCount or 0) or 0,
+        interfaceName = network.interface or "",
+        gateway = wan.gateway or "",
+        linkUp = status.link_up and true or false,
+        routeReady = status.route_ready and true or false,
+        probeOk = status.probe_ok and true or false,
+        onlineReason = status.online_reason or network.online_reason or "",
+    }
+end
+
+local function build_compat_payload(endpoint, databus)
+    if endpoint == "sysinfo" then
+        return type(databus.system_status) == "table" and databus.system_status or {}
+    elseif endpoint == "netinfo" then
+        return build_compat_netinfo(databus)
+    elseif endpoint == "traffic" then
+        return type(databus.interface_traffic) == "table" and databus.interface_traffic or {}
+    elseif endpoint == "devices" then
+        local devices = databus.devices
+        if type(devices) == "table" and type(devices.list) == "table" then
+            return devices.list
+        end
+        return type(devices) == "table" and devices or {}
+    elseif endpoint == "domains" then
+        local domains = type(databus.domains) == "table" and databus.domains or {}
+        if domains.realtime == nil and type(databus.realtime_urls) == "table" then
+            local realtime = {}
+            for _, item in ipairs(databus.realtime_urls.list or {}) do
+                realtime[#realtime + 1] = {
+                    domain = item.domain,
+                    count = tonumber(item.count or item.hits or 0) or 0,
+                }
+            end
+            domains.realtime = realtime
+            domains.realtime_source = databus.realtime_urls.source or domains.realtime_source or "dashboard-core"
+        end
+        return domains
+    end
+
+    return databus
+end
+
+local function api_backend_compat(endpoint)
+    local data, err = get_backend_databus_or_error()
+    if not data then
+        return write_json(err, 503, "Service Unavailable")
+    end
+    write_json(build_compat_payload(endpoint, data))
+end
+
 local LOCAL_API = {
-    sysinfo = api_sysinfo,
-    netinfo = api_netinfo,
-    traffic = api_traffic,
-    devices = api_devices,
-    domains = api_domains,
+    sysinfo = function() return api_backend_compat("sysinfo") end,
+    netinfo = function() return api_backend_compat("netinfo") end,
+    traffic = function() return api_backend_compat("traffic") end,
+    devices = function() return api_backend_compat("devices") end,
+    domains = function() return api_backend_compat("domains") end,
     databus = api_databus,
     backend = api_databus,
     common = api_databus,

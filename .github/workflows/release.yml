@@ -1,4 +1,4 @@
-name: Build and Release IPK
+name: Build and Release
 
 on:
   push:
@@ -13,54 +13,12 @@ permissions:
 
 env:
   PKG_NAME: luci-app-dashboard
+  SDK_ARCH: mediatek-filogic-24.10.5
 
 jobs:
   build:
-    name: Build ${{ matrix.sdk }}
+    name: Build dashboard packages
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - sdk: mediatek-filogic-23.05.0
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-23.05.1
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-23.05.2
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-23.05.3
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-23.05.4
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-23.05.5
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-23.05.6
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-24.10.0
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-24.10.1
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-24.10.2
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-24.10.3
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-24.10.4
-            primary: false
-            packages: kmod-dashboard-monitor
-          - sdk: mediatek-filogic-24.10.5
-            primary: true
-            packages: luci-app-dashboard kmod-dashboard-monitor
 
     steps:
       - name: Checkout
@@ -76,48 +34,56 @@ jobs:
             --exclude '.feed' \
             ./ ./.feed/${{ env.PKG_NAME }}/
 
-      - name: Build Package
+      - name: Build LuCI packages
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: ${{ matrix.sdk }}
+          ARCH: ${{ env.SDK_ARCH }}
           FEED_DIR: ${{ github.workspace }}/.feed
-          PACKAGES: ${{ matrix.packages }}
+          PACKAGES: luci-app-dashboard dashboard-core
           NO_REFRESH_CHECK: true
 
-      - name: Collect Release IPKs
+      - name: Collect release assets
         run: |
           set -euo pipefail
           rm -rf dist
           mkdir -p dist
 
           echo "All built IPKs:"
-          find bin -type f -name '*.ipk' | sort || true
+          find bin -type f -name '*.ipk' | sort
 
-          if [ "${{ matrix.primary }}" = "true" ]; then
-            find bin -type f -name 'luci-app-dashboard_*.ipk' -exec cp -f {} dist/ \;
-            find bin -type f -name 'luci-i18n-dashboard-zh-cn_*.ipk' -exec cp -f {} dist/ \;
-          fi
+          app_ipk="$(find bin -type f -name 'luci-app-dashboard_*.ipk' | sort | head -n 1)"
+          i18n_ipk="$(find bin -type f -name 'luci-i18n-dashboard-zh-cn_*.ipk' | sort | head -n 1)"
+          core_ipk="$(find bin -type f -name 'dashboard-core_*.ipk' | sort | head -n 1)"
 
-          while IFS= read -r file; do
-            base="$(basename "$file" .ipk)"
-            cp -f "$file" "dist/${base}_${{ matrix.sdk }}.ipk"
-          done < <(find bin -type f -name 'kmod-dashboard-monitor_*.ipk' | sort)
+          test -n "$app_ipk" || (echo "Missing luci-app-dashboard ipk" && exit 1)
+          test -n "$i18n_ipk" || (echo "Missing luci-i18n-dashboard-zh-cn ipk" && exit 1)
+          test -n "$core_ipk" || (echo "Missing dashboard-core ipk" && exit 1)
 
-          echo "Release IPKs:"
-          ls -lah dist || true
+          cp -f "$app_ipk" dist/luci-app-dashboard.ipk
+          cp -f "$i18n_ipk" dist/luci-i18n-dashboard-zh-cn.ipk
+          cp -f install.sh dist/install.sh
 
-          ls dist/kmod-dashboard-monitor_*_${{ matrix.sdk }}.ipk >/dev/null 2>&1 || (echo "Missing kmod-dashboard-monitor ipk for ${{ matrix.sdk }}" && exit 1)
+          workdir="$(mktemp -d)"
+          core_ipk_abs="$(readlink -f "$core_ipk")"
+          (
+            cd "$workdir"
+            ar x "$core_ipk_abs"
+            core_arch="$(tar -xOzf control.tar.gz ./control | awk -F ': ' '$1 == "Architecture" { print $2; exit }')"
+            test -n "$core_arch" || (echo "Missing dashboard-core architecture metadata" && exit 1)
+            tar -xOzf data.tar.gz ./usr/bin/dashboard-core > "${GITHUB_WORKSPACE}/dist/dashboard-core-${core_arch}"
+          )
+          rm -rf "$workdir"
 
-          if [ "${{ matrix.primary }}" = "true" ]; then
-            ls dist/luci-app-dashboard_*.ipk >/dev/null 2>&1 || (echo "Missing luci-app-dashboard ipk" && exit 1)
-            ls dist/luci-i18n-dashboard-zh-cn_*.ipk >/dev/null 2>&1 || (echo "Missing luci-i18n-dashboard-zh-cn ipk" && exit 1)
-          fi
+          chmod 755 dist/install.sh dist/dashboard-core-*
 
-      - name: Upload Artifacts
+          echo "Release assets:"
+          ls -lah dist
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dashboard-packages-${{ matrix.sdk }}
-          path: dist/*.ipk
+          name: dashboard-release-assets
+          path: dist/*
           if-no-files-found: error
 
   release:
@@ -127,25 +93,25 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
-      - name: Download Build Artifacts
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: dashboard-packages-*
+          name: dashboard-release-assets
           path: dist
-          merge-multiple: true
 
-      - name: Show Release Files
+      - name: Show release files
         run: |
           set -euo pipefail
           ls -lah dist
-          find dist -maxdepth 1 -type f -name '*.ipk' | sort
 
-          ls dist/luci-app-dashboard_*.ipk >/dev/null 2>&1 || (echo "Missing luci-app-dashboard ipk in release stage" && exit 1)
-          ls dist/luci-i18n-dashboard-zh-cn_*.ipk >/dev/null 2>&1 || (echo "Missing luci-i18n-dashboard-zh-cn ipk in release stage" && exit 1)
-          ls dist/kmod-dashboard-monitor_*.ipk >/dev/null 2>&1 || (echo "Missing kmod-dashboard-monitor ipk in release stage" && exit 1)
+          test -f dist/install.sh || (echo "Missing install.sh" && exit 1)
+          test -f dist/luci-app-dashboard.ipk || (echo "Missing luci-app-dashboard.ipk" && exit 1)
+          test -f dist/luci-i18n-dashboard-zh-cn.ipk || (echo "Missing luci-i18n-dashboard-zh-cn.ipk" && exit 1)
+          compgen -G "dist/dashboard-core-*" >/dev/null || (echo "Missing dashboard-core assets" && exit 1)
+          ! compgen -G "dist/kmod-dashboard-monitor_*.ipk" >/dev/null || (echo "kmod assets must not be released" && exit 1)
 
-      - name: Create Release and Upload Assets
+      - name: Create Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.ipk
+          files: dist/*
           generate_release_notes: true

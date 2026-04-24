@@ -1,6 +1,7 @@
 .worktrees/
 .vscode/
 node_modules/
+dist/
 *.zip
 feature3.0_cn_*.tar
 feature3.0_cn_*.bin

@@ -121,6 +121,49 @@
             }
         };
 
+        function extractDatabusEndpoint(endpoint, databus) {
+            const data = databus || {};
+            if (endpoint === 'databus' || endpoint === 'backend' || endpoint === 'common') return data;
+            if (endpoint === 'sysinfo') return data.system_status || null;
+            if (endpoint === 'traffic') return data.interface_traffic || null;
+            if (endpoint === 'devices') return (data.devices && data.devices.list) || [];
+            if (endpoint === 'domains') {
+                const domains = data.domains || {};
+                if (!domains.realtime && data.realtime_urls && Array.isArray(data.realtime_urls.list)) {
+                    domains.realtime = data.realtime_urls.list.map((item) => ({
+                        domain: item.domain,
+                        count: Number(item.count || item.hits) || 0,
+                    }));
+                    domains.realtime_source = domains.realtime_source || data.realtime_urls.source || 'dashboard-core';
+                }
+                return domains;
+            }
+            if (endpoint === 'netinfo') {
+                const status = data.status || {};
+                const network = data.network_status || {};
+                const lan = network.lan || {};
+                const wan = network.wan || {};
+                const online = Boolean(status.online);
+                const internet = status.internet || (online ? 'up' : 'down');
+                return {
+                    wanStatus: internet === 'up' || online ? 'up' : 'down',
+                    wanIp: wan.ip || '',
+                    wanIpv6: wan.ipv6 || '',
+                    lanIp: lan.ip || '',
+                    dns: wan.dns || lan.dns || [],
+                    network_uptime_raw: Number(network.network_uptime_raw || network.uptime_raw) || 0,
+                    connCount: Number(status.conn_count || status.connCount) || 0,
+                    interfaceName: network.interface || '',
+                    gateway: wan.gateway || '',
+                    linkUp: Boolean(status.link_up),
+                    routeReady: Boolean(status.route_ready),
+                    probeOk: Boolean(status.probe_ok),
+                    onlineReason: status.online_reason || network.online_reason || '',
+                };
+            }
+            return data;
+        }
+
         async function apiRequest(ep) {
             const hostname = window.location.hostname || '';
             const protocol = window.location.protocol || '';
@@ -131,10 +174,12 @@
 
             try {
                 const API_BASE = getApiBase();
-                const url = `${API_BASE}/${ep}?t=${Date.now()}`;
+                const url = `${API_BASE}/databus?t=${Date.now()}`;
                 const res = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return await res.json();
+                const databus = await res.json();
+                if (databus && databus.error) throw new Error(databus.error);
+                return extractDatabusEndpoint(ep, databus);
             } catch (e) {
                 console.error(`[API Error] ${ep}:`, e.message);
                 return null;
