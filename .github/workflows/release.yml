@@ -63,16 +63,12 @@ jobs:
           cp -f "$i18n_ipk" dist/luci-i18n-dashboard-zh-cn.ipk
           cp -f install.sh dist/install.sh
 
-          workdir="$(mktemp -d)"
-          core_ipk_abs="$(readlink -f "$core_ipk")"
-          (
-            cd "$workdir"
-            ar x "$core_ipk_abs"
-            core_arch="$(tar -xOzf control.tar.gz ./control | awk -F ': ' '$1 == "Architecture" { print $2; exit }')"
-            test -n "$core_arch" || (echo "Missing dashboard-core architecture metadata" && exit 1)
-            tar -xOzf data.tar.gz ./usr/bin/dashboard-core > "${GITHUB_WORKSPACE}/dist/dashboard-core-${core_arch}"
-          )
-          rm -rf "$workdir"
+          core_arch="$(basename "$core_ipk" .ipk | sed -E 's/^dashboard-core_[^_]+_(.+)$/\1/')"
+          test -n "$core_arch" || (echo "Cannot parse dashboard-core architecture from $core_ipk" && exit 1)
+
+          core_bin="$(find . -type f -name dashboard-core -printf '%s %p\n' | sort -nr | awk 'NR == 1 { $1=\"\"; sub(/^ /, \"\"); print }')"
+          test -n "$core_bin" || (echo "Missing compiled dashboard-core binary" && exit 1)
+          cp -f "$core_bin" "dist/dashboard-core-${core_arch}"
 
           chmod 755 dist/install.sh dist/dashboard-core-*
 
