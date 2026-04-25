@@ -59,6 +59,12 @@ download() {
     fi
 }
 
+opkg_install() {
+    if ! opkg install --force-reinstall "$@"; then
+        opkg install "$@"
+    fi
+}
+
 detect_arch() {
     if [ -n "${DASHBOARD_CORE_ARCH:-}" ]; then
         printf '%s\n' "$DASHBOARD_CORE_ARCH"
@@ -154,7 +160,7 @@ cleanup_legacy_kmod
 
 if [ "$CORE_MODE" = "ipk" ]; then
     echo "Using backend package asset: ${CORE_IPK_ASSET}"
-    opkg install "${CORE_IPK_FILE}"
+    opkg_install "${CORE_IPK_FILE}"
     chmod 755 "$CORE_BIN" 2>/dev/null || true
 else
     CANDIDATE_ARCHES="$(detect_arch_candidates)"
@@ -184,7 +190,7 @@ write_service
 "$CORE_SERVICE" enable
 "$CORE_SERVICE" restart
 
-opkg install "${INSTALL_DIR}/luci-app-dashboard.ipk" "${INSTALL_DIR}/luci-i18n-dashboard-zh-cn.ipk"
+opkg_install "${INSTALL_DIR}/luci-app-dashboard.ipk" "${INSTALL_DIR}/luci-i18n-dashboard-zh-cn.ipk"
 "$CORE_SERVICE" restart
 
 rm -f /tmp/luci-indexcache /tmp/luci-indexcache.* 2>/dev/null || true
