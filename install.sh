@@ -150,8 +150,12 @@ if download "${BASE_URL}/${CORE_IPK_ASSET}" "${CORE_IPK_FILE}" 1; then
     CORE_MODE="ipk"
 fi
 
+cleanup_legacy_kmod
+
 if [ "$CORE_MODE" = "ipk" ]; then
     echo "Using backend package asset: ${CORE_IPK_ASSET}"
+    opkg install "${CORE_IPK_FILE}"
+    chmod 755 "$CORE_BIN" 2>/dev/null || true
 else
     CANDIDATE_ARCHES="$(detect_arch_candidates)"
     echo "Backend architecture candidates: $(printf '%s' "$CANDIDATE_ARCHES" | tr '\n' ' ')"
@@ -177,15 +181,10 @@ else
 fi
 
 write_service
-
-cleanup_legacy_kmod
-if [ "$CORE_MODE" = "ipk" ]; then
-    opkg install "${CORE_IPK_FILE}"
-    chmod 755 "$CORE_BIN" 2>/dev/null || true
-fi
-opkg install "${INSTALL_DIR}/luci-app-dashboard.ipk" "${INSTALL_DIR}/luci-i18n-dashboard-zh-cn.ipk"
-
 "$CORE_SERVICE" enable
+"$CORE_SERVICE" restart
+
+opkg install "${INSTALL_DIR}/luci-app-dashboard.ipk" "${INSTALL_DIR}/luci-i18n-dashboard-zh-cn.ipk"
 "$CORE_SERVICE" restart
 
 rm -f /tmp/luci-indexcache /tmp/luci-indexcache.* 2>/dev/null || true

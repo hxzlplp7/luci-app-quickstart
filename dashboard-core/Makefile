@@ -30,6 +30,8 @@ endef
 define Package/dashboard-core/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/dashboard-core $(1)/usr/bin/dashboard-core
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) ./files/dashboard-core.init $(1)/etc/init.d/dashboard-core
 endef
 
 $(eval $(call BuildPackage,dashboard-core))
