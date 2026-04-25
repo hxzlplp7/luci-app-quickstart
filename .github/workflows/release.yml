@@ -69,6 +69,14 @@ jobs:
           core_out="dist/dashboard-core-${core_arch}"
           core_tmp="$(mktemp -d)"
           extract_ok=0
+          extract_from_tar() {
+            archive="$1"
+            entry="$(tar -tf "$archive" 2>/dev/null | grep -E '(^|/)dashboard-core$' | head -n 1 || true)"
+            if [ -z "$entry" ]; then
+              return 1
+            fi
+            tar -xOf "$archive" "$entry" > "$core_out"
+          }
 
           if ar t "$core_ipk" >/dev/null 2>&1; then
             (
@@ -77,26 +85,28 @@ jobs:
             )
             data_tar="$(find "$core_tmp" -maxdepth 1 -type f -name 'data.tar.*' | sort | head -n 1)"
             if [ -n "$data_tar" ]; then
-              case "$data_tar" in
-                *.gz) tar -xOf "$data_tar" ./usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true ;;
-                *.xz) tar -xOf "$data_tar" ./usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true ;;
-                *.zst) tar --zstd -xOf "$data_tar" ./usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true ;;
-                *.tar) tar -xOf "$data_tar" ./usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true ;;
-              esac
+              extract_from_tar "$data_tar" && extract_ok=1 || true
             fi
           fi
 
           if [ "$extract_ok" -ne 1 ] && tar -tf "$core_ipk" >/dev/null 2>&1; then
-            tar -xOf "$core_ipk" ./usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true
+            data_entry="$(tar -tf "$core_ipk" | grep -E '(^|/)data\.tar\.' | head -n 1 || true)"
+            if [ -n "$data_entry" ]; then
+              data_archive="$core_tmp/$(basename "$data_entry")"
+              tar -xOf "$core_ipk" "$data_entry" > "$data_archive" || true
+              if [ -s "$data_archive" ]; then
+                extract_from_tar "$data_archive" && extract_ok=1 || true
+              fi
+            fi
             if [ "$extract_ok" -ne 1 ]; then
-              tar -xOf "$core_ipk" usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true
+              extract_from_tar "$core_ipk" && extract_ok=1 || true
             fi
           fi
 
           if [ "$extract_ok" -ne 1 ] && command -v bsdtar >/dev/null 2>&1; then
-            bsdtar -xOf "$core_ipk" ./usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true
-            if [ "$extract_ok" -ne 1 ]; then
-              bsdtar -xOf "$core_ipk" usr/bin/dashboard-core > "$core_out" && extract_ok=1 || true
+            entry="$(bsdtar -tf "$core_ipk" 2>/dev/null | grep -E '(^|/)dashboard-core$' | head -n 1 || true)"
+            if [ -n "$entry" ]; then
+              bsdtar -xOf "$core_ipk" "$entry" > "$core_out" && extract_ok=1 || true
             fi
           fi
 
