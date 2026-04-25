@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -495,6 +496,724 @@ static void append_devices(struct buffer *b)
     buf_append(b, "]}");
 }
 
+
+#define HASH_SIZE 4096
+
+struct domain_node {
+    char domain[128];
+    int count;
+    int last_seen;
+    struct domain_node *next;
+};
+
+struct ip_domain_node {
+    char domain[128];
+    int weight;
+    struct ip_domain_node *next;
+};
+
+struct ip_node {
+    char ip[64];
+    struct ip_domain_node *domains;
+    struct ip_node *next;
+};
+
+struct client_node {
+    char ip[64];
+    struct client_node *next;
+};
+
+struct realtime_node {
+    char domain[128];
+    int count;
+    int last_seen;
+    int devices;
+    struct client_node *clients;
+    struct realtime_node *next;
+};
+
+struct app_node {
+    char name[64];
+    char class_name[64];
+    int hits;
+    int latest_seq;
+    struct app_node *next;
+};
+
+struct app_rule {
+    const char *app;
+    const char *class_name;
+    const char *pattern;
+};
+
+static const struct app_rule APP_RULES[] = {
+    {"YouTube", "video", "youtube.com"}, {"YouTube", "video", "googlevideo.com"}, {"YouTube", "video", "ytimg.com"},
+    {"Netflix", "video", "netflix.com"}, {"Netflix", "video", "nflxvideo.net"},
+    {"Bilibili", "video", "bilibili.com"}, {"Bilibili", "video", "bilivideo.com"},
+    {"TikTok", "social", "tiktok.com"}, {"TikTok", "social", "byteoversea.com"}, {"TikTok", "social", "musical.ly"},
+    {"Douyin", "social", "douyin.com"}, {"Douyin", "social", "douyincdn.com"},
+    {"WeChat", "social", "wechat.com"}, {"WeChat", "social", "weixin.qq.com"}, {"WeChat", "social", "qpic.cn"},
+    {"QQ", "social", "qq.com"}, {"QQ", "social", "qzone.qq.com"}, {"QQ", "social", "tencent.com"},
+    {"Telegram", "social", "telegram.org"}, {"Telegram", "social", "t.me"},
+    {"Discord", "social", "discord.com"}, {"Discord", "social", "discord.gg"},
+    {"GitHub", "developer", "github.com"}, {"GitHub", "developer", "githubusercontent.com"},
+    {"Steam", "game", "steampowered.com"}, {"Steam", "game", "steamstatic.com"},
+    {"PlayStation", "game", "playstation.com"}, {"PlayStation", "game", "psn"},
+    {"Xbox", "game", "xboxlive.com"}, {"Xbox", "game", "xbox.com"},
+    {"Apple", "cloud", "apple.com"}, {"Apple", "cloud", "icloud.com"}, {"Apple", "cloud", "mzstatic.com"},
+    {"Google", "search", "google.com"}, {"Google", "search", "gstatic.com"}, {"Google", "search", "googleapis.com"},
+    {"Microsoft", "cloud", "microsoft.com"}, {"Microsoft", "cloud", "live.com"}, {"Microsoft", "cloud", "office.com"},
+    {NULL, NULL, NULL}
+};
+
+static struct domain_node *domain_hash_table[HASH_SIZE];
+static struct ip_node *ip_hash_table[HASH_SIZE];
+static struct realtime_node *realtime_hash_table[HASH_SIZE];
+static struct app_node *app_hash_table[HASH_SIZE];
+static int g_seq = 0;
+
+static unsigned int hash_str(const char *str) {
+    unsigned int hash = 5381;
+    int c;
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c;
+    return hash % HASH_SIZE;
+}
+
+static void clear_hashes() {
+    for (int i = 0; i < HASH_SIZE; i++) {
+        struct domain_node *d = domain_hash_table[i];
+        while (d) {
+            struct domain_node *tmp = d;
+            d = d->next;
+            free(tmp);
+        }
+        domain_hash_table[i] = NULL;
+
+        struct ip_node *ipn = ip_hash_table[i];
+        while (ipn) {
+            struct ip_node *tmp = ipn;
+            struct ip_domain_node *dn = ipn->domains;
+            while (dn) {
+                struct ip_domain_node *dtmp = dn;
+                dn = dn->next;
+                free(dtmp);
+            }
+            ipn = ipn->next;
+            free(tmp);
+        }
+        ip_hash_table[i] = NULL;
+
+        struct realtime_node *rn = realtime_hash_table[i];
+        while (rn) {
+            struct realtime_node *tmp = rn;
+            struct client_node *cn = rn->clients;
+            while (cn) {
+                struct client_node *ctmp = cn;
+                cn = cn->next;
+                free(ctmp);
+            }
+            rn = rn->next;
+            free(tmp);
+        }
+        realtime_hash_table[i] = NULL;
+
+        struct app_node *an = app_hash_table[i];
+        while (an) {
+            struct app_node *tmp = an;
+            an = an->next;
+            free(tmp);
+        }
+        app_hash_table[i] = NULL;
+    }
+}
+
+static void record_app(const char *name, const char *class_name) {
+    unsigned int h = hash_str(name);
+    struct app_node *node = app_hash_table[h];
+    while (node) {
+        if (strcmp(node->name, name) == 0) {
+            node->hits++;
+            node->latest_seq = g_seq;
+            return;
+        }
+        node = node->next;
+    }
+    node = malloc(sizeof(struct app_node));
+    if (!node) return;
+    strncpy(node->name, name, sizeof(node->name)-1);
+    node->name[sizeof(node->name)-1] = '\0';
+    strncpy(node->class_name, class_name, sizeof(node->class_name)-1);
+    node->class_name[sizeof(node->class_name)-1] = '\0';
+    node->hits = 1;
+    node->latest_seq = g_seq;
+    node->next = app_hash_table[h];
+    app_hash_table[h] = node;
+}
+
+static bool is_ipv4_literal(const char *value)
+{
+    int d1, d2, d3, d4;
+    char tail;
+    return value && sscanf(value, "%d.%d.%d.%d%c", &d1, &d2, &d3, &d4, &tail) == 4 &&
+           d1 >= 0 && d1 <= 255 && d2 >= 0 && d2 <= 255 &&
+           d3 >= 0 && d3 <= 255 && d4 >= 0 && d4 <= 255;
+}
+
+static void match_app(const char *domain) {
+    for (int i = 0; APP_RULES[i].app != NULL; i++) {
+        if (strstr(domain, APP_RULES[i].pattern)) {
+            record_app(APP_RULES[i].app, APP_RULES[i].class_name);
+            break;
+        }
+    }
+}
+
+static void record_ip_domain(const char *ip, const char *domain) {
+    if (!ip || !domain || !*ip || !*domain) return;
+    unsigned int h = hash_str(ip);
+    struct ip_node *node = ip_hash_table[h];
+    while (node) {
+        if (strcmp(node->ip, ip) == 0) {
+            struct ip_domain_node *dn = node->domains;
+            while (dn) {
+                if (strcmp(dn->domain, domain) == 0) {
+                    dn->weight++;
+                    return;
+                }
+                dn = dn->next;
+            }
+            dn = calloc(1, sizeof(*dn));
+            if (!dn) return;
+            snprintf(dn->domain, sizeof(dn->domain), "%s", domain);
+            dn->weight = 1;
+            dn->next = node->domains;
+            node->domains = dn;
+            return;
+        }
+        node = node->next;
+    }
+    node = calloc(1, sizeof(*node));
+    if (!node) return;
+    snprintf(node->ip, sizeof(node->ip), "%s", ip);
+    node->next = ip_hash_table[h];
+    ip_hash_table[h] = node;
+    record_ip_domain(ip, domain);
+}
+
+static const char* lookup_ip(const char *ip) {
+    if (!ip || !*ip) return NULL;
+    unsigned int h = hash_str(ip);
+    struct ip_node *node = ip_hash_table[h];
+    while (node) {
+        if (strcmp(node->ip, ip) == 0) {
+            struct ip_domain_node *best = NULL;
+            for (struct ip_domain_node *dn = node->domains; dn; dn = dn->next) {
+                if (!best || dn->weight > best->weight) {
+                    best = dn;
+                }
+            }
+            return best ? best->domain : NULL;
+        }
+        node = node->next;
+    }
+    return NULL;
+}
+
+static void record_realtime_domain(const char *domain, const char *client_ip)
+{
+    if (!domain || !*domain) return;
+
+    unsigned int h = hash_str(domain);
+    struct realtime_node *node = realtime_hash_table[h];
+    while (node) {
+        if (strcmp(node->domain, domain) == 0) {
+            node->count++;
+            node->last_seen = g_seq;
+            break;
+        }
+        node = node->next;
+    }
+    if (!node) {
+        node = calloc(1, sizeof(*node));
+        if (!node) return;
+        snprintf(node->domain, sizeof(node->domain), "%s", domain);
+        node->count = 1;
+        node->last_seen = g_seq;
+        node->next = realtime_hash_table[h];
+        realtime_hash_table[h] = node;
+    }
+
+    if (client_ip && *client_ip) {
+        for (struct client_node *cn = node->clients; cn; cn = cn->next) {
+            if (strcmp(cn->ip, client_ip) == 0) {
+                return;
+            }
+        }
+        struct client_node *cn = calloc(1, sizeof(*cn));
+        if (!cn) return;
+        snprintf(cn->ip, sizeof(cn->ip), "%s", client_ip);
+        cn->next = node->clients;
+        node->clients = cn;
+        node->devices++;
+    }
+}
+
+static void record_domain(const char *domain, int weight) {
+    if (!domain || !*domain) return;
+    match_app(domain);
+    unsigned int h = hash_str(domain);
+    struct domain_node *node = domain_hash_table[h];
+    while (node) {
+        if (strcmp(node->domain, domain) == 0) {
+            node->count += weight;
+            node->last_seen = ++g_seq;
+            return;
+        }
+        node = node->next;
+    }
+    node = calloc(1, sizeof(*node));
+    if (!node) return;
+    snprintf(node->domain, sizeof(node->domain), "%s", domain);
+    node->count = weight;
+    node->last_seen = ++g_seq;
+    node->next = domain_hash_table[h];
+    domain_hash_table[h] = node;
+}
+
+static void normalize_domain(const char *raw, char *out, size_t out_len) {
+    out[0] = '\0';
+    if (!raw || !*raw) return;
+    const char *p = raw;
+    while (*p && isspace((unsigned char)*p)) p++;
+    if (strncmp(p, "https://", 8) == 0) p += 8;
+    else if (strncmp(p, "http://", 7) == 0) p += 7;
+
+    if (strncmp(p, "*.", 2) == 0) p += 2;
+
+    size_t i = 0;
+    bool has_alpha = false;
+    while (*p && !isspace((unsigned char)*p) && *p != '/' && *p != ':' &&
+           *p != '&' && *p != '"' && *p != '\'' && *p != ',' &&
+           *p != ')' && *p != ']' && i < out_len - 1) {
+        if (isalpha((unsigned char)*p)) has_alpha = true;
+        out[i++] = tolower((unsigned char)*p);
+        p++;
+    }
+    out[i] = '\0';
+
+    while (i > 0 && out[i-1] == '.') {
+        out[--i] = '\0';
+    }
+
+    if (!strchr(out, '.') || !has_alpha) {
+        out[0] = '\0';
+        return;
+    }
+
+    if (is_ipv4_literal(out)) {
+        out[0] = '\0';
+        return;
+    }
+    if (strstr(out, "in-addr.arpa") || strcmp(out, "localhost") == 0) {
+        out[0] = '\0';
+    }
+}
+
+static bool remember_line_domain(char seen[][128], int *seen_count, const char *domain)
+{
+    for (int i = 0; i < *seen_count; i++) {
+        if (strcmp(seen[i], domain) == 0) {
+            return false;
+        }
+    }
+    if (*seen_count < 32) {
+        snprintf(seen[*seen_count], sizeof(seen[*seen_count]), "%s", domain);
+        (*seen_count)++;
+    }
+    return true;
+}
+
+static void record_candidate(const char *raw, int weight, char seen[][128], int *seen_count)
+{
+    char dom[256];
+    normalize_domain(raw, dom, sizeof(dom));
+    if (dom[0] && remember_line_domain(seen, seen_count, dom)) {
+        record_domain(dom, weight);
+    }
+}
+
+static void scan_generic_domains(const char *line, int weight, char seen[][128], int *seen_count)
+{
+    const char *p = line;
+    while (*p) {
+        while (*p && !(isalnum((unsigned char)*p))) p++;
+        const char *start = p;
+        bool dot = false;
+        while (*p && (isalnum((unsigned char)*p) || *p == '-' || *p == '.')) {
+            if (*p == '.') dot = true;
+            p++;
+        }
+        if (dot && p > start && (size_t)(p - start) < 256) {
+            char token[256];
+            memcpy(token, start, (size_t)(p - start));
+            token[p - start] = '\0';
+            record_candidate(token, weight, seen, seen_count);
+        }
+    }
+}
+
+static void extract_and_record(const char *line, int weight) {
+    char buf[256];
+    const char *p;
+    char seen[32][128];
+    int seen_count = 0;
+
+    if ((p = strstr(line, "--> "))) {
+        if (sscanf(p + 4, "%255[^:]", buf) == 1) {
+            record_candidate(buf, weight, seen, &seen_count);
+        }
+    }
+    if ((p = strstr(line, "[DNS] "))) {
+        if (sscanf(p + 6, "%255s", buf) == 1) {
+            record_candidate(buf, weight, seen, &seen_count);
+        }
+    }
+    if ((p = strstr(line, "host="))) {
+        if (sscanf(p + 5, "%255[^ \t\r\n&\"']", buf) == 1) {
+            record_candidate(buf, weight, seen, &seen_count);
+        }
+    }
+    if ((p = strstr(line, "sni="))) {
+        if (sscanf(p + 4, "%255[^ \t\r\n&\"']", buf) == 1) {
+            record_candidate(buf, weight, seen, &seen_count);
+        }
+    }
+    if ((p = strstr(line, "query"))) {
+        const char *q = strstr(p, " from");
+        const char *name = p + 5;
+        while (*name && (isalnum((unsigned char)*name) || *name == '[' || *name == ']')) name++;
+        while (*name && isspace((unsigned char)*name)) name++;
+        if (q && q > name && (size_t)(q - name) < sizeof(buf)) {
+            memcpy(buf, name, (size_t)(q - name));
+            buf[q - name] = '\0';
+            record_candidate(buf, weight, seen, &seen_count);
+        }
+    }
+    if ((p = strstr(line, "reply "))) {
+        char reply_dom[256], is_word[16], reply_ip[64];
+        if (sscanf(p + 6, "%255s %15s %63s", reply_dom, is_word, reply_ip) == 3 && strcmp(is_word, "is") == 0) {
+            char dom[256];
+            normalize_domain(reply_dom, dom, sizeof(dom));
+            if (dom[0]) {
+                if (remember_line_domain(seen, &seen_count, dom)) record_domain(dom, weight);
+                record_ip_domain(reply_ip, dom);
+            }
+        }
+    }
+    if ((p = strstr(line, "cached "))) {
+        char reply_dom[256], is_word[16], reply_ip[64];
+        if (sscanf(p + 7, "%255s %15s %63s", reply_dom, is_word, reply_ip) == 3 && strcmp(is_word, "is") == 0) {
+            char dom[256];
+            normalize_domain(reply_dom, dom, sizeof(dom));
+            if (dom[0]) {
+                if (remember_line_domain(seen, &seen_count, dom)) record_domain(dom, weight);
+                record_ip_domain(reply_ip, dom);
+            }
+        }
+    }
+
+    if ((p = strstr(line, "\"domain\"")) || (p = strstr(line, "\"host\"")) || (p = strstr(line, "\"url\"")) || (p = strstr(line, "\"sni\""))) {
+        const char *colon = strchr(p, ':');
+        if (colon) {
+            const char *quote = strchr(colon, '"');
+            if (quote) {
+                if (sscanf(quote + 1, "%255[^\"]", buf) == 1) {
+                    record_candidate(buf, weight, seen, &seen_count);
+                }
+            }
+        }
+    }
+    scan_generic_domains(line, weight, seen, &seen_count);
+}
+
+static void parse_conntrack() {
+    FILE *p = popen("conntrack -L 2>/dev/null", "r");
+    if (!p) return;
+    char line[512];
+    while (fgets(line, sizeof(line), p)) {
+        char *dst = strstr(line, "dst=");
+        char *src = strstr(line, "src=");
+        if (dst) {
+            char ip[64];
+            if (sscanf(dst + 4, "%63[^ \t\r\n]", ip) == 1) {
+                const char *dom = lookup_ip(ip);
+                if (dom) {
+                    char src_ip[64] = "";
+                    if (src) {
+                        sscanf(src + 4, "%63[^ \t\r\n]", src_ip);
+                    }
+                    record_domain(dom, 1);
+                    record_realtime_domain(dom, src_ip);
+                }
+            }
+        }
+    }
+    pclose(p);
+}
+
+static void parse_command_lines(const char *cmd) {
+    FILE *p = popen(cmd, "r");
+    if (!p) return;
+    char line[1024];
+    while (fgets(line, sizeof(line), p)) {
+        extract_and_record(line, 1);
+    }
+    pclose(p);
+}
+
+static int cmp_domain_count(const void *a, const void *b) {
+    const struct domain_node *na = *(const struct domain_node **)a;
+    const struct domain_node *nb = *(const struct domain_node **)b;
+    if (na->count != nb->count) return nb->count - na->count;
+    return nb->last_seen - na->last_seen;
+}
+
+static int cmp_domain_recent(const void *a, const void *b) {
+    const struct domain_node *na = *(const struct domain_node **)a;
+    const struct domain_node *nb = *(const struct domain_node **)b;
+    return nb->last_seen - na->last_seen;
+}
+
+static int cmp_realtime_count(const void *a, const void *b) {
+    const struct realtime_node *na = *(const struct realtime_node **)a;
+    const struct realtime_node *nb = *(const struct realtime_node **)b;
+    if (na->count != nb->count) return nb->count - na->count;
+    return nb->last_seen - na->last_seen;
+}
+
+static int cmp_app_count(const void *a, const void *b) {
+    const struct app_node *na = *(const struct app_node **)a;
+    const struct app_node *nb = *(const struct app_node **)b;
+    if (na->hits != nb->hits) return nb->hits - na->hits;
+    return nb->latest_seq - na->latest_seq;
+}
+
+static int count_domain_hits(void)
+{
+    int total = 0;
+    for (int i = 0; i < HASH_SIZE; i++) {
+        for (struct domain_node *node = domain_hash_table[i]; node; node = node->next) {
+            total += node->count;
+        }
+    }
+    return total;
+}
+
+static int count_realtime_rows(void)
+{
+    int total = 0;
+    for (int i = 0; i < HASH_SIZE; i++) {
+        for (struct realtime_node *node = realtime_hash_table[i]; node; node = node->next) {
+            total++;
+        }
+    }
+    return total;
+}
+
+static void append_source_label(char *dst, size_t dst_len, const char *label)
+{
+    size_t used;
+    if (!label || !*label || dst_len == 0) return;
+    used = strlen(dst);
+    if (used >= dst_len - 1) return;
+    if (dst[0] != '\0') {
+        strncat(dst, "+", dst_len - used - 1);
+        used = strlen(dst);
+        if (used >= dst_len - 1) return;
+    }
+    strncat(dst, label, dst_len - used - 1);
+}
+
+static void parse_named_source(const char *label, const char *cmd, char *source, size_t source_len)
+{
+    int before = count_domain_hits();
+    parse_command_lines(cmd);
+    if (count_domain_hits() > before) {
+        append_source_label(source, source_len, label);
+    }
+}
+
+static void append_domains_and_apps(struct buffer *b) {
+    char source[256] = "";
+    char realtime_source[64] = "none";
+
+    g_seq = 0;
+    clear_hashes();
+
+    parse_named_source("appfilter", "ubus call appfilter visit_list 2>/dev/null", source, sizeof(source));
+    parse_named_source("dnsmasq-logread", "logread | grep -iE 'dnsmasq' | tail -n 12000", source, sizeof(source));
+
+    int before_conntrack = count_domain_hits();
+    parse_conntrack();
+    if (count_domain_hits() > before_conntrack) {
+        append_source_label(source, sizeof(source), "conntrack+dnsmasq");
+        snprintf(realtime_source, sizeof(realtime_source), "conntrack+dnsmasq");
+    }
+
+    parse_named_source("smartdns", "tail -n 6000 /tmp/smartdns.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("adguardhome", "tail -n 6000 /tmp/AdGuardHome.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("mosdns", "tail -n 6000 /tmp/mosdns.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("openclash", "tail -n 6000 /tmp/openclash.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("passwall", "tail -n 6000 /tmp/log/passwall.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("passwall2", "tail -n 6000 /tmp/log/passwall2.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("homeproxy", "tail -n 6000 /tmp/homeproxy.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("mihomo", "tail -n 6000 /tmp/mihomo.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("sing-box", "tail -n 6000 /tmp/sing-box.log 2>/dev/null", source, sizeof(source));
+    parse_named_source("logread-dns", "logread | grep -iE 'smartdns|adguardhome|mosdns|unbound|pdnsd|chinadns|openclash|passwall|mihomo|sing-box|homeproxy|appfilter' | tail -n 8000", source, sizeof(source));
+    if (source[0] == '\0') {
+        snprintf(source, sizeof(source), "none");
+    }
+
+    int g_all_domains_count = 0;
+    for (int i = 0; i < HASH_SIZE; i++) {
+        struct domain_node *node = domain_hash_table[i];
+        while (node) {
+            g_all_domains_count++;
+            node = node->next;
+        }
+    }
+
+    struct domain_node **g_all_domains = malloc(sizeof(struct domain_node *) * (g_all_domains_count + 1));
+    if (!g_all_domains) {
+        g_all_domains_count = 0;
+    }
+    int idx = 0;
+    if (g_all_domains) {
+        for (int i = 0; i < HASH_SIZE; i++) {
+            struct domain_node *node = domain_hash_table[i];
+            while (node) {
+                g_all_domains[idx++] = node;
+                node = node->next;
+            }
+        }
+    }
+
+    int g_all_realtime_count = count_realtime_rows();
+    struct realtime_node **g_all_realtime = NULL;
+    if (g_all_realtime_count > 0) {
+        g_all_realtime = malloc(sizeof(struct realtime_node *) * (size_t)g_all_realtime_count);
+        if (g_all_realtime) {
+            int ridx = 0;
+            for (int i = 0; i < HASH_SIZE; i++) {
+                struct realtime_node *node = realtime_hash_table[i];
+                while (node) {
+                    g_all_realtime[ridx++] = node;
+                    node = node->next;
+                }
+            }
+            qsort(g_all_realtime, g_all_realtime_count, sizeof(struct realtime_node *), cmp_realtime_count);
+        } else {
+            g_all_realtime_count = 0;
+        }
+    }
+
+    buf_append(b, "\"domains\":{\"source\":");
+    json_string(b, source);
+    buf_append(b, ",\"realtime_source\":");
+    json_string(b, realtime_source);
+    buf_append(b, ",\"top\":[");
+    qsort(g_all_domains, g_all_domains_count, sizeof(struct domain_node *), cmp_domain_count);
+    int top_count = g_all_domains_count > 25 ? 25 : g_all_domains_count;
+    for (int i = 0; i < top_count; i++) {
+        if (i > 0) buf_append(b, ",");
+        buf_append(b, "{");
+        json_key_string(b, "domain", g_all_domains[i]->domain);
+        buf_printf(b, ",\"count\":%d}", g_all_domains[i]->count);
+    }
+    buf_append(b, "],\"recent\":[");
+    qsort(g_all_domains, g_all_domains_count, sizeof(struct domain_node *), cmp_domain_recent);
+    int recent_count = g_all_domains_count > 25 ? 25 : g_all_domains_count;
+    for (int i = 0; i < recent_count; i++) {
+        if (i > 0) buf_append(b, ",");
+        buf_append(b, "{");
+        json_key_string(b, "domain", g_all_domains[i]->domain);
+        buf_printf(b, ",\"count\":%d}", g_all_domains[i]->count);
+    }
+    buf_append(b, "],\"realtime\":[");
+    int realtime_count = g_all_realtime_count > 25 ? 25 : g_all_realtime_count;
+    for (int i = 0; i < realtime_count; i++) {
+        if (i > 0) buf_append(b, ",");
+        buf_append(b, "{");
+        json_key_string(b, "domain", g_all_realtime[i]->domain);
+        buf_printf(b, ",\"count\":%d,\"devices\":%d}", g_all_realtime[i]->count, g_all_realtime[i]->devices);
+    }
+    buf_append(b, "]},\"realtime_urls\":{\"source\":");
+    json_string(b, realtime_source);
+    buf_printf(b, ",\"total\":%d,\"list\":[", realtime_count);
+    for (int i = 0; i < realtime_count; i++) {
+        if (i > 0) buf_append(b, ",");
+        buf_append(b, "{");
+        json_key_string(b, "domain", g_all_realtime[i]->domain);
+        buf_printf(b, ",\"count\":%d,\"hits\":%d,\"devices\":%d}", g_all_realtime[i]->count, g_all_realtime[i]->count, g_all_realtime[i]->devices);
+    }
+    buf_append(b, "]},");
+
+    free(g_all_domains);
+    free(g_all_realtime);
+
+    // Apps
+    int g_all_apps_count = 0;
+    for (int i = 0; i < HASH_SIZE; i++) {
+        struct app_node *node = app_hash_table[i];
+        while (node) {
+            g_all_apps_count++;
+            node = node->next;
+        }
+    }
+
+    struct app_node **g_all_apps = malloc(sizeof(struct app_node *) * (g_all_apps_count + 1));
+    if (!g_all_apps) {
+        g_all_apps_count = 0;
+    }
+    idx = 0;
+    if (g_all_apps) {
+        for (int i = 0; i < HASH_SIZE; i++) {
+            struct app_node *node = app_hash_table[i];
+            while (node) {
+                g_all_apps[idx++] = node;
+                node = node->next;
+            }
+        }
+    }
+
+    qsort(g_all_apps, g_all_apps_count, sizeof(struct app_node *), cmp_app_count);
+    int top_apps = g_all_apps_count > 12 ? 12 : g_all_apps_count;
+
+    buf_printf(b, "\"online_apps\":{\"total\":%d,\"list\":[", top_apps);
+    for (int i = 0; i < top_apps; i++) {
+        if (i > 0) buf_append(b, ",");
+        buf_append(b, "{");
+        json_key_string(b, "name", g_all_apps[i]->name);
+        buf_append(b, ",");
+        json_key_string(b, "class", g_all_apps[i]->class_name);
+        buf_append(b, ",");
+        json_key_string(b, "class_label", g_all_apps[i]->class_name);
+        buf_append(b, ",");
+        json_key_string(b, "source", "domain-heuristic");
+        buf_printf(b, ",\"hits\":%d,\"time\":%d,\"id\":%d}", g_all_apps[i]->hits, g_all_apps[i]->hits, i);
+    }
+    buf_append(b, "],\"source\":\"domain-heuristic\"},");
+
+    // app_recognition
+    buf_append(b, "\"app_recognition\":{\"available\":");
+    buf_append(b, top_apps > 0 ? "true" : "false");
+    buf_append(b, ",\"source\":\"domain-heuristic\",\"engine\":\"dashboard-core\",\"feature_version\":\"\",\"class_stats\":[]}");
+
+    free(g_all_apps);
+}
+
+
 static char *build_databus(void)
 {
     struct buffer b;
@@ -510,10 +1229,9 @@ static char *build_databus(void)
     append_system_status(&b);
     buf_append(&b, ",");
     append_traffic(&b, iface);
-    buf_append(&b, ",\"online_apps\":{\"total\":0,\"list\":[]}");
-    buf_append(&b, ",\"app_recognition\":{\"available\":false,\"source\":\"dashboard-core\",\"engine\":\"dashboard-core-stage1\",\"feature_version\":\"\",\"class_stats\":[]}");
-    buf_append(&b, ",\"domains\":{\"source\":\"dashboard-core\",\"realtime_source\":\"dashboard-core\",\"top\":[],\"recent\":[],\"realtime\":[]}");
-    buf_append(&b, ",\"realtime_urls\":{\"source\":\"dashboard-core\",\"total\":0,\"list\":[]},");
+    buf_append(&b, ",");
+    append_domains_and_apps(&b);
+    buf_append(&b, ",");
     append_devices(&b);
     buf_append(&b, "}");
 
