@@ -21,6 +21,32 @@
         return Number.isFinite(number) && number >= 0 ? number : null;
     }
 
+    function isLikelyDomain(value) {
+        const domain = String(value || '').trim().toLowerCase();
+        if (!domain || domain.length > 253 || !domain.includes('.') || /^\d+\.\d+\.\d+\.\d+$/.test(domain)) {
+            return false;
+        }
+
+        const labels = domain.split('.');
+        if (labels.length < 2) return false;
+
+        for (const label of labels) {
+            if (!label || label.length > 63 || !/^[a-z0-9-]+$/.test(label) || label.startsWith('-') || label.endsWith('-')) {
+                return false;
+            }
+        }
+
+        const tld = labels[labels.length - 1];
+        if (!/^[a-z]/.test(tld)) return false;
+        if (!tld.startsWith('xn--') && !/^[a-z-]+$/.test(tld)) return false;
+
+        return labels.some((label) => /[a-z]/.test(label));
+    }
+
+    function filterDomainRows(rows) {
+        return toArray(rows).filter((item) => item && isLikelyDomain(item.domain));
+    }
+
     function pickActiveAppState(databus, oafData) {
         const databusApps = toArray(databus && databus.online_apps && databus.online_apps.list);
         const databusRecognition = (databus && databus.app_recognition) || {};
@@ -114,5 +140,7 @@
     return {
         pickActiveAppState: pickActiveAppState,
         deriveTrafficSnapshot: deriveTrafficSnapshot,
+        isLikelyDomain: isLikelyDomain,
+        filterDomainRows: filterDomainRows,
     };
 });

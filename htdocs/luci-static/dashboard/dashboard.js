@@ -74,6 +74,11 @@
                     nextState: nextState,
                 };
             };
+        const filterDomainRows = typeof dashboardData.filterDomainRows === 'function'
+            ? dashboardData.filterDomainRows
+            : function(rows) {
+                return Array.isArray(rows) ? rows.filter((item) => item && item.domain) : [];
+            };
 
         let mockTx = 1024 * 1024 * 50;
         let mockRx = 1024 * 1024 * 300;
@@ -297,7 +302,7 @@
             document.getElementById('realtime-domain-source').innerText = formatSourceLabel(domainData.realtime_source);
 
             // 渲染热门域名列表
-            const topList = domainData.top || [];
+            const topList = filterDomainRows(domainData.top);
             const maxTopCount = topList.reduce((max, item) => Math.max(max, item.count), 0);
             document.getElementById('top-domains-list').innerHTML = topList.slice(0, 10).map((item) => {
                 const percent = maxTopCount > 0 ? (item.count / maxTopCount) * 100 : 0;
@@ -314,7 +319,7 @@
             }).join('') || '<div class="text-center text-gray-400 text-xs mt-4">暂无热门域名数据</div>';
 
             // 渲染最近/实时域名列表
-            const rtList = domainData.realtime && domainData.realtime.length > 0 ? domainData.realtime : (domainData.recent || []);
+            const rtList = filterDomainRows(domainData.realtime);
             document.getElementById('recent-domains-list').innerHTML = rtList.slice(0, 25).map((item) => `
                 <div class="flex items-center justify-between px-2 py-1.5 hover:bg-teal-50 rounded-md group transition-colors">
                     <div class="flex items-center space-x-2 truncate">

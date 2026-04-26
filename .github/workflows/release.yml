@@ -13,11 +13,10 @@ permissions:
 
 env:
   PKG_NAME: luci-app-dashboard
-  SDK_ARCH: mediatek-filogic-24.10.5
 
 jobs:
-  build:
-    name: Build dashboard packages
+  build-luci:
+    name: Build LuCI packages
     runs-on: ubuntu-latest
 
     steps:
@@ -34,16 +33,16 @@ jobs:
             --exclude '.feed' \
             ./ ./.feed/${{ env.PKG_NAME }}/
 
-      - name: Build LuCI packages
+      - name: Build LuCI package
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: ${{ env.SDK_ARCH }}
+          ARCH: mediatek-filogic-24.10.5
           FEED_DIR: ${{ github.workspace }}/.feed
-          PACKAGES: luci-app-dashboard dashboard-core
+          PACKAGES: luci-app-dashboard
           NO_REFRESH_CHECK: true
           NO_SHFMT_CHECK: true
 
-      - name: Collect release assets
+      - name: Collect LuCI release assets
         run: |
           set -euo pipefail
           rm -rf dist
@@ -54,20 +53,80 @@ jobs:
 
           app_ipk="$(find bin -type f -name 'luci-app-dashboard_*.ipk' | sort | head -n 1)"
           i18n_ipk="$(find bin -type f -name 'luci-i18n-dashboard-zh-cn_*.ipk' | sort | head -n 1)"
-          core_ipk="$(find bin -type f -name 'dashboard-core_*.ipk' | sort | head -n 1)"
 
           test -n "$app_ipk" || (echo "Missing luci-app-dashboard ipk" && exit 1)
           test -n "$i18n_ipk" || (echo "Missing luci-i18n-dashboard-zh-cn ipk" && exit 1)
-          test -n "$core_ipk" || (echo "Missing dashboard-core ipk" && exit 1)
 
           cp -f "$app_ipk" dist/luci-app-dashboard.ipk
           cp -f "$i18n_ipk" dist/luci-i18n-dashboard-zh-cn.ipk
-          cp -f "$core_ipk" dist/dashboard-core.ipk
           cp -f install.sh dist/install.sh
+          chmod 755 dist/install.sh
+
+          echo "LuCI release assets:"
+          ls -lah dist
+
+      - name: Upload LuCI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-luci-assets
+          path: dist/*
+          if-no-files-found: error
+
+  build-core:
+    name: Build dashboard-core (${{ matrix.sdk_arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sdk_arch: mediatek-filogic-24.10.5
+            aliases: ""
+          - sdk_arch: armsr-armv8-24.10.5
+            aliases: "aarch64 armv8"
+          - sdk_arch: armsr-armv7-24.10.5
+            aliases: "armv7"
+          - sdk_arch: x86-64-24.10.5
+            aliases: "x86"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare local feed layout
+        run: |
+          rm -rf .feed
+          mkdir -p .feed/${{ env.PKG_NAME }}
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.feed' \
+            ./ ./.feed/${{ env.PKG_NAME }}/
+
+      - name: Build backend package
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: ${{ matrix.sdk_arch }}
+          FEED_DIR: ${{ github.workspace }}/.feed
+          PACKAGES: dashboard-core
+          NO_REFRESH_CHECK: true
+          NO_SHFMT_CHECK: true
+
+      - name: Collect backend assets
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
+
+          echo "All built IPKs:"
+          find bin -type f -name '*.ipk' | sort
+
+          core_ipk="$(find bin -type f -name 'dashboard-core_*.ipk' | sort | head -n 1)"
+          test -n "$core_ipk" || (echo "Missing dashboard-core ipk" && exit 1)
 
           core_arch="$(basename "$core_ipk" .ipk | sed -E 's/^dashboard-core_[^_]+_(.+)$/\1/')"
           test -n "$core_arch" || (echo "Cannot parse dashboard-core architecture from $core_ipk" && exit 1)
 
+          cp -f "$core_ipk" "dist/dashboard-core-${core_arch}.ipk"
           core_out="dist/dashboard-core-${core_arch}"
           core_tmp="$(mktemp -d)"
           extract_ok=0
@@ -105,42 +164,49 @@ jobs:
             fi
           fi
 
-          if [ "$extract_ok" -ne 1 ] && command -v bsdtar >/dev/null 2>&1; then
-            entry="$(bsdtar -tf "$core_ipk" 2>/dev/null | grep -E '(^|/)dashboard-core$' | head -n 1 || true)"
-            if [ -n "$entry" ]; then
-              bsdtar -xOf "$core_ipk" "$entry" > "$core_out" && extract_ok=1 || true
-            fi
-          fi
-
           rm -rf "$core_tmp"
           test "$extract_ok" -eq 1 || (echo "Cannot extract dashboard-core from $core_ipk" && file "$core_ipk" && exit 1)
           core_size="$(wc -c < "$core_out")"
           test "$core_size" -gt 4096 || (echo "Extracted dashboard-core looks too small: ${core_size} bytes" && exit 1)
 
-          chmod 755 dist/install.sh dist/dashboard-core-*
+          aliases="${{ matrix.aliases }}"
+          for alias in $aliases; do
+            cp -f "$core_ipk" "dist/dashboard-core-${alias}.ipk"
+            cp -f "$core_out" "dist/dashboard-core-${alias}"
+          done
+          chmod 755 dist/dashboard-core-*
 
-          echo "Release assets:"
+          echo "Backend release assets:"
           ls -lah dist
 
-      - name: Upload artifacts
+      - name: Upload backend artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dashboard-release-assets
+          name: dashboard-core-${{ matrix.sdk_arch }}
           path: dist/*
           if-no-files-found: error
 
   release:
     name: Publish Release
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build-luci
+      - build-core
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
-      - name: Download build artifacts
+      - name: Download LuCI artifacts
         uses: actions/download-artifact@v4
         with:
-          name: dashboard-release-assets
+          name: dashboard-luci-assets
           path: dist
+
+      - name: Download backend artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dashboard-core-*
+          path: dist
+          merge-multiple: true
 
       - name: Show release files
         run: |
@@ -150,8 +216,13 @@ jobs:
           test -f dist/install.sh || (echo "Missing install.sh" && exit 1)
           test -f dist/luci-app-dashboard.ipk || (echo "Missing luci-app-dashboard.ipk" && exit 1)
           test -f dist/luci-i18n-dashboard-zh-cn.ipk || (echo "Missing luci-i18n-dashboard-zh-cn.ipk" && exit 1)
-          test -f dist/dashboard-core.ipk || (echo "Missing dashboard-core.ipk" && exit 1)
           compgen -G "dist/dashboard-core-*" >/dev/null || (echo "Missing dashboard-core assets" && exit 1)
+          compgen -G "dist/dashboard-core-*.ipk" >/dev/null || (echo "Missing dashboard-core architecture IPKs" && exit 1)
+          test -f dist/dashboard-core-aarch64.ipk || (echo "Missing dashboard-core-aarch64.ipk" && exit 1)
+          test -f dist/dashboard-core-armv8.ipk || (echo "Missing dashboard-core-armv8.ipk" && exit 1)
+          test -f dist/dashboard-core-armv7.ipk || (echo "Missing dashboard-core-armv7.ipk" && exit 1)
+          test -f dist/dashboard-core-x86.ipk || (echo "Missing dashboard-core-x86.ipk" && exit 1)
+          ! compgen -G "dist/dashboard-core.ipk" >/dev/null || (echo "dashboard-core.ipk must not be released as a generic asset" && exit 1)
           ! compgen -G "dist/kmod-dashboard-monitor_*.ipk" >/dev/null || (echo "kmod assets must not be released" && exit 1)
 
       - name: Create Release and upload assets
@@ -159,3 +230,5 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          overwrite_files: true
+          make_latest: true

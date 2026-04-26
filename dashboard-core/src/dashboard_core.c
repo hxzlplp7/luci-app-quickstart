@@ -33,6 +33,12 @@ struct traffic_state {
     time_t ts;
 };
 
+struct cpu_state {
+    unsigned long long idle;
+    unsigned long long total;
+    bool valid;
+};
+
 struct device {
     char ip[64];
     char mac[64];
@@ -41,6 +47,7 @@ struct device {
 };
 
 static struct traffic_state g_traffic;
+static struct cpu_state g_cpu;
 
 static void buf_init(struct buffer *b)
 {
@@ -256,6 +263,82 @@ static void get_openwrt_release_value(const char *key, char *out, size_t out_len
     fclose(f);
 }
 
+static bool read_cpu_sample(unsigned long long *idle_out, unsigned long long *total_out)
+{
+    FILE *f = fopen("/proc/stat", "r");
+    char cpu[16];
+    unsigned long long user = 0, nice = 0, system = 0, idle = 0, iowait = 0;
+    unsigned long long irq = 0, softirq = 0, steal = 0;
+
+    if (!f) {
+        return false;
+    }
+    if (fscanf(f, "%15s %llu %llu %llu %llu %llu %llu %llu %llu",
+               cpu, &user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal) < 5) {
+        fclose(f);
+        return false;
+    }
+    fclose(f);
+
+    if (strcmp(cpu, "cpu") != 0) {
+        return false;
+    }
+
+    *idle_out = idle + iowait;
+    *total_out = user + nice + system + idle + iowait + irq + softirq + steal;
+    return *total_out > 0;
+}
+
+static int calculate_cpu_usage(unsigned long long prev_idle, unsigned long long prev_total,
+                               unsigned long long idle, unsigned long long total)
+{
+    unsigned long long idle_delta;
+    unsigned long long total_delta;
+    unsigned long long busy_delta;
+
+    if (total <= prev_total || idle < prev_idle) {
+        return 0;
+    }
+
+    idle_delta = idle - prev_idle;
+    total_delta = total - prev_total;
+    if (total_delta == 0 || idle_delta > total_delta) {
+        return 0;
+    }
+
+    busy_delta = total_delta - idle_delta;
+    return (int)((busy_delta * 100 + total_delta / 2) / total_delta);
+}
+
+static int get_cpu_usage(void)
+{
+    unsigned long long idle = 0;
+    unsigned long long total = 0;
+    int usage = 0;
+
+    if (!read_cpu_sample(&idle, &total)) {
+        return 0;
+    }
+
+    if (!g_cpu.valid) {
+        g_cpu.idle = idle;
+        g_cpu.total = total;
+        g_cpu.valid = true;
+        usleep(100000);
+        if (!read_cpu_sample(&idle, &total)) {
+            return 0;
+        }
+    }
+
+    usage = calculate_cpu_usage(g_cpu.idle, g_cpu.total, idle, total);
+    if (usage < 0) usage = 0;
+    if (usage > 100) usage = 100;
+
+    g_cpu.idle = idle;
+    g_cpu.total = total;
+    return usage;
+}
+
 static void append_system_status(struct buffer *b)
 {
     char model[MAX_TEXT] = "";
@@ -267,6 +350,7 @@ static void append_system_status(struct buffer *b)
     unsigned long uptime = 0;
     int temp = 0;
     int mem_usage = 0;
+    int cpu_usage = get_cpu_usage();
 
     read_first_line("/tmp/sysinfo/model", model, sizeof(model));
     if (model[0] == '\0') {
@@ -329,8 +413,8 @@ static void append_system_status(struct buffer *b)
     json_key_string(b, "firmware", firmware);
     buf_append(b, ",");
     json_key_string(b, "kernel", kernel);
-    buf_printf(b, ",\"temp\":%d,\"systime_raw\":%ld,\"uptime_raw\":%lu,\"cpuUsage\":0,\"memUsage\":%d}",
-               temp, (long)time(NULL), uptime, mem_usage);
+    buf_printf(b, ",\"temp\":%d,\"systime_raw\":%ld,\"uptime_raw\":%lu,\"cpuUsage\":%d,\"memUsage\":%d}",
+               temp, (long)time(NULL), uptime, cpu_usage, mem_usage);
 }
 
 static void append_network_status(struct buffer *b, const char *iface)
@@ -781,6 +865,76 @@ static void record_domain(const char *domain, int weight) {
     domain_hash_table[h] = node;
 }
 
+static bool is_domain_label_char(char c)
+{
+    return isalnum((unsigned char)c) || c == '-';
+}
+
+static bool is_valid_domain_name(const char *domain)
+{
+    const char *label = domain;
+    const char *last_label = domain;
+    int label_len = 0;
+    int label_count = 1;
+    bool has_alpha = false;
+
+    if (!domain || !*domain || strlen(domain) >= 254) {
+        return false;
+    }
+
+    for (const char *p = domain; ; p++) {
+        char c = *p;
+
+        if (c == '.' || c == '\0') {
+            if (label_len == 0 || label_len > 63) {
+                return false;
+            }
+            if (label[0] == '-' || p[-1] == '-') {
+                return false;
+            }
+            if (c == '\0') {
+                break;
+            }
+            label = p + 1;
+            last_label = label;
+            label_len = 0;
+            label_count++;
+            continue;
+        }
+
+        if (!is_domain_label_char(c)) {
+            return false;
+        }
+        if (isalpha((unsigned char)c)) {
+            has_alpha = true;
+        }
+        label_len++;
+    }
+
+    if (label_count < 2 || !has_alpha || is_ipv4_literal(domain)) {
+        return false;
+    }
+
+    if (!isalpha((unsigned char)last_label[0])) {
+        return false;
+    }
+    if (strncmp(last_label, "xn--", 4) == 0) {
+        for (const char *p = last_label; *p; p++) {
+            if (!is_domain_label_char(*p)) {
+                return false;
+            }
+        }
+    } else {
+        for (const char *p = last_label; *p; p++) {
+            if (!isalpha((unsigned char)*p) && *p != '-') {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 static void normalize_domain(const char *raw, char *out, size_t out_len) {
     out[0] = '\0';
     if (!raw || !*raw) return;
@@ -806,7 +960,7 @@ static void normalize_domain(const char *raw, char *out, size_t out_len) {
         out[--i] = '\0';
     }
 
-    if (!strchr(out, '.') || !has_alpha) {
+    if (!strchr(out, '.') || !has_alpha || !is_valid_domain_name(out)) {
         out[0] = '\0';
         return;
     }

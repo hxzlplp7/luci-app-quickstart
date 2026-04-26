@@ -94,16 +94,42 @@ detect_arch() {
 
 detect_arch_candidates() {
     primary_arch="$(detect_arch)"
+    candidates=""
+
+    append_candidate() {
+        candidate="$1"
+        [ -n "$candidate" ] || return
+        case " $candidates " in
+            *" $candidate "*) ;;
+            *) candidates="${candidates}${candidates:+ }${candidate}" ;;
+        esac
+    }
+
+    append_candidate "$primary_arch"
 
     case "$primary_arch" in
-        aarch64_generic|aarch64|arm64)
-            printf '%s\n' "$primary_arch"
-            printf '%s\n' "aarch64_cortex-a53"
+        aarch64*|arm64|armv8)
+            append_candidate "aarch64_generic"
+            append_candidate "aarch64_cortex-a53"
+            append_candidate "aarch64"
+            append_candidate "armv8"
             ;;
-        *)
-            printf '%s\n' "$primary_arch"
+        arm_cortex-a7*|arm_cortex-a8*|arm_cortex-a9*|arm_cortex-a15*|armv7*|armhf)
+            append_candidate "arm_cortex-a7_neon-vfpv4"
+            append_candidate "arm_cortex-a9_vfpv3-d16"
+            append_candidate "armv7"
+            ;;
+        x86_64|amd64)
+            append_candidate "x86_64"
+            append_candidate "x86"
+            ;;
+        i386*|i686*|x86)
+            append_candidate "x86"
+            append_candidate "i386_pentium4"
             ;;
     esac
+
+    printf '%s\n' "$candidates" | tr ' ' '\n'
 }
 
 write_service() {
@@ -141,9 +167,9 @@ cleanup_legacy_kmod() {
 
 ARCH=""
 CORE_ASSET=""
-CORE_IPK_ASSET="dashboard-core.ipk"
-CORE_IPK_FILE="${INSTALL_DIR}/${CORE_IPK_ASSET}"
-CORE_MODE="binary"
+CORE_IPK_ASSET=""
+CORE_IPK_FILE=""
+CORE_MODE=""
 
 echo "Using release: ${VERSION}"
 
@@ -152,38 +178,58 @@ mkdir -p "$INSTALL_DIR"
 
 download "${BASE_URL}/luci-app-dashboard.ipk" "${INSTALL_DIR}/luci-app-dashboard.ipk"
 download "${BASE_URL}/luci-i18n-dashboard-zh-cn.ipk" "${INSTALL_DIR}/luci-i18n-dashboard-zh-cn.ipk"
-if download "${BASE_URL}/${CORE_IPK_ASSET}" "${CORE_IPK_FILE}" 1; then
-    CORE_MODE="ipk"
-fi
 
 cleanup_legacy_kmod
 
-if [ "$CORE_MODE" = "ipk" ]; then
-    echo "Using backend package asset: ${CORE_IPK_ASSET}"
-    opkg_install "${CORE_IPK_FILE}"
-    chmod 755 "$CORE_BIN" 2>/dev/null || true
-else
-    CANDIDATE_ARCHES="$(detect_arch_candidates)"
-    echo "Backend architecture candidates: $(printf '%s' "$CANDIDATE_ARCHES" | tr '\n' ' ')"
+CANDIDATE_ARCHES="$(detect_arch_candidates)"
+echo "Backend architecture candidates: $(printf '%s' "$CANDIDATE_ARCHES" | tr '\n' ' ')"
 
-    for candidate in $CANDIDATE_ARCHES; do
-        candidate_asset="dashboard-core-${candidate}"
-        if download "${BASE_URL}/${candidate_asset}" "${INSTALL_DIR}/${candidate_asset}" 1; then
+for candidate in $CANDIDATE_ARCHES; do
+    candidate_ipk_asset="dashboard-core-${candidate}.ipk"
+    candidate_ipk_file="${INSTALL_DIR}/${candidate_ipk_asset}"
+    if download "${BASE_URL}/${candidate_ipk_asset}" "${candidate_ipk_file}" 1; then
+        echo "Using backend package asset: ${candidate_ipk_asset}"
+        if opkg_install "${candidate_ipk_file}"; then
             ARCH="$candidate"
-            CORE_ASSET="$candidate_asset"
+            CORE_IPK_ASSET="$candidate_ipk_asset"
+            CORE_IPK_FILE="$candidate_ipk_file"
+            CORE_MODE="ipk"
             break
         fi
-    done
-
-    if [ -z "$CORE_ASSET" ]; then
-        echo "No compatible dashboard-core asset found for candidates: ${CANDIDATE_ARCHES}" >&2
-        echo "Set DASHBOARD_CORE_ARCH explicitly, then rerun installer." >&2
-        exit 1
+        echo "Backend package ${candidate_ipk_asset} is not compatible, trying next candidate." >&2
     fi
+done
 
+for candidate in $CANDIDATE_ARCHES; do
+    [ "$CORE_MODE" = "ipk" ] && break
+    candidate_asset="dashboard-core-${candidate}"
+    if download "${BASE_URL}/${candidate_asset}" "${INSTALL_DIR}/${candidate_asset}" 1; then
+        ARCH="$candidate"
+        CORE_ASSET="$candidate_asset"
+        CORE_MODE="binary"
+        break
+    fi
+done
+
+if [ -z "$CORE_MODE" ] && download "${BASE_URL}/dashboard-core.ipk" "${INSTALL_DIR}/dashboard-core.ipk" 1; then
+    echo "Using legacy backend package asset: dashboard-core.ipk"
+    if opkg_install "${INSTALL_DIR}/dashboard-core.ipk"; then
+        CORE_MODE="ipk"
+    else
+        echo "Legacy backend package is not compatible with this device architecture." >&2
+    fi
+fi
+
+if [ "$CORE_MODE" = "binary" ]; then
     echo "Using backend architecture: ${ARCH}"
     cp -f "${INSTALL_DIR}/${CORE_ASSET}" "$CORE_BIN"
     chmod 755 "$CORE_BIN"
+elif [ "$CORE_MODE" = "ipk" ]; then
+    chmod 755 "$CORE_BIN" 2>/dev/null || true
+else
+    echo "No compatible dashboard-core asset found for candidates: ${CANDIDATE_ARCHES}" >&2
+    echo "Set DASHBOARD_CORE_ARCH explicitly, then rerun installer." >&2
+    exit 1
 fi
 
 write_service

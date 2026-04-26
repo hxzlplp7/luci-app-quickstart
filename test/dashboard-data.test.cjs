@@ -90,3 +90,25 @@ test('resets rates on interface switch to avoid bogus spikes', () => {
     assert.equal(sample.rxRate, 0);
     assert.equal(sample.nextState.interface, 'wwan0');
 });
+
+test('filters non-domain tokens from domain rows', () => {
+    const rows = helpers.filterDomainRows([
+        { domain: '8.0mb', count: 3188 },
+        { domain: '12.627884932z', count: 1 },
+        { domain: '4.523234ms', count: 1 },
+        { domain: 'analytics.apis.mcafee.com', count: 5 },
+        { domain: 'www.msftconnecttest.com', count: 28 },
+        { domain: '127.0.0.1', count: 3 },
+    ]);
+
+    assert.deepEqual(rows.map((item) => item.domain), [
+        'analytics.apis.mcafee.com',
+        'www.msftconnecttest.com',
+    ]);
+});
+
+test('accepts common and punycode domain shapes', () => {
+    assert.equal(helpers.isLikelyDomain('chatgpt.com'), true);
+    assert.equal(helpers.isLikelyDomain('xn--fiqs8s.cn'), true);
+    assert.equal(helpers.isLikelyDomain('edge.microsoft.com'), true);
+});
